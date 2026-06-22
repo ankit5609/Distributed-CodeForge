@@ -1,0 +1,2 @@
+com.cybernode.ai.distributed_codeforge.common_lib.error.SharedExceptionAutoConfiguration
+com.cybernode.ai.distributed_codeforge.common_lib.security.SharedSecurityAutoConfiguration
