@@ -34,7 +34,7 @@ public class AccountServiceSecurityConfig {
                     .cors(Customizer.withDefaults())
                     .sessionManagement(sessionConfig -> sessionConfig.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                     .authorizeHttpRequests(auth -> auth
-                            .requestMatchers("/api/auth/**","/webhooks/**"
+                            .requestMatchers("/auth/**","/webhooks/**"
                             ).permitAll()
                             .anyRequest().authenticated()
                     )

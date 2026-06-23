@@ -1,18 +1,21 @@
 package com.cybernode.ai.distributed_codeforge.account_service.controller;
 
 
+import com.cybernode.ai.distributed_codeforge.account_service.dto.auth.AuthResponse;
+import com.cybernode.ai.distributed_codeforge.account_service.dto.auth.LoginRequest;
+import com.cybernode.ai.distributed_codeforge.account_service.dto.auth.SignUpRequest;
 import com.cybernode.ai.distributed_codeforge.account_service.service.AuthService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/auth")
 @RequiredArgsConstructor
 public class AuthController {
 
     private final AuthService authService;
-    private final UserService userService;
+//    private final UserService userService;
 
     @PostMapping("/signup")
     public ResponseEntity<AuthResponse> signup(@RequestBody SignUpRequest request){
@@ -24,9 +27,9 @@ public class AuthController {
         return ResponseEntity.ok(authService.login(request));
     }
 
-    @GetMapping("/profile")
-    public ResponseEntity<UserProfileResponse> getProfile(){
-        Long userId=1L;
-        return ResponseEntity.ok(userService.getProfile(userId));
-    }
+//    @GetMapping("/profile")
+//    public ResponseEntity<UserProfileResponse> getProfile(){
+//        Long userId=1L;
+//        return ResponseEntity.ok(userService.getProfile(userId));
+//    }
 }
