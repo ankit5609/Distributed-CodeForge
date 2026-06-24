@@ -92,7 +92,8 @@
 		<dependency>
 			<groupId>com.stripe</groupId>
 			<artifactId>stripe-java</artifactId>
-			<version>31.1.0</version>
+			<version>32.0.0</version>
+			<scope>compile</scope>
 		</dependency>
 
 		<dependency>
@@ -160,27 +161,6 @@
 						</exclude>
 					</excludes>
 				</configuration>
-			</plugin>
-			<plugin>
-				<groupId>com.google.cloud.tools</groupId>
-				<artifactId>jib-maven-plugin</artifactId>
-				<version>3.4.4</version>
-				<configuration>
-					<to>
-						<image>docker.io/anuj55149/lovable-${project.name}:${project.version}</image>
-						<tags>
-							<tag>latest</tag>
-						</tags>
-					</to>
-				</configuration>
-				<executions>
-					<execution>
-						<phase>package</phase>
-						<goals>
-							<goal>build</goal>
-						</goals>
-					</execution>
-				</executions>
 			</plugin>
 		</plugins>
 	</build>

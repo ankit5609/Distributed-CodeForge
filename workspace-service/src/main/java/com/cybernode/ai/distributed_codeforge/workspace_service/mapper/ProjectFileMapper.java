@@ -1,6 +1,6 @@
 package com.cybernode.ai.distributed_codeforge.workspace_service.mapper;
 
-import com.cybernode.ai.distributed_codeforge.workspace_service.dto.project.FileNode;
+import com.cybernode.ai.distributed_codeforge.common_lib.dto.FileNode;
 import com.cybernode.ai.distributed_codeforge.workspace_service.entity.ProjectFile;
 import org.mapstruct.Mapper;
 

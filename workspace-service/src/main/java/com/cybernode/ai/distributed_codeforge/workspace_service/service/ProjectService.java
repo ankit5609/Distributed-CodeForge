@@ -1,5 +1,6 @@
 package com.cybernode.ai.distributed_codeforge.workspace_service.service;
 
+import com.cybernode.ai.distributed_codeforge.common_lib.enums.ProjectPermission;
 import com.cybernode.ai.distributed_codeforge.workspace_service.dto.project.ProjectRequest;
 import com.cybernode.ai.distributed_codeforge.workspace_service.dto.project.ProjectResponse;
 import com.cybernode.ai.distributed_codeforge.workspace_service.dto.project.ProjectSummaryResponse;
@@ -17,4 +18,6 @@ public interface ProjectService {
     ProjectResponse updateProject(Long id, ProjectRequest request);
 
     void softdelete(Long id);
+
+    boolean hasPermission(Long projectId, ProjectPermission permission);
 }

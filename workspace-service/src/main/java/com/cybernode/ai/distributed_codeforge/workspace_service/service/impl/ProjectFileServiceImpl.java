@@ -1,9 +1,8 @@
 package com.cybernode.ai.distributed_codeforge.workspace_service.service.impl;
 
+import com.cybernode.ai.distributed_codeforge.common_lib.dto.FileNode;
+import com.cybernode.ai.distributed_codeforge.common_lib.dto.FileTreeDto;
 import com.cybernode.ai.distributed_codeforge.common_lib.error.ResourceNotFoundException;
-import com.cybernode.ai.distributed_codeforge.workspace_service.dto.project.FileContentResponse;
-import com.cybernode.ai.distributed_codeforge.workspace_service.dto.project.FileNode;
-import com.cybernode.ai.distributed_codeforge.workspace_service.dto.project.FileTreeResponse;
 import com.cybernode.ai.distributed_codeforge.workspace_service.entity.Project;
 import com.cybernode.ai.distributed_codeforge.workspace_service.entity.ProjectFile;
 import com.cybernode.ai.distributed_codeforge.workspace_service.mapper.ProjectFileMapper;
@@ -40,14 +39,14 @@ public class ProjectFileServiceImpl implements ProjectFileService {
     private static final String BUCKET_NAME = "projects";
 
     @Override
-    public FileTreeResponse getFileTree(Long projectId) {
+    public FileTreeDto getFileTree(Long projectId) {
         List<ProjectFile> projectFileList = projectFileRepository.findByProjectId(projectId);
         List<FileNode> fileNodes=projectFileMapper.toListOfFileNode(projectFileList);
-        return new FileTreeResponse(fileNodes);
+        return new FileTreeDto(fileNodes);
     }
 
     @Override
-    public FileContentResponse getFileContent(Long projectId, String path) {
+    public String getFileContent(Long projectId, String path) {
         String objectName = projectId + "/" + path;
         try (
                 InputStream is = minioClient.getObject(
@@ -57,7 +56,7 @@ public class ProjectFileServiceImpl implements ProjectFileService {
                                 .build())) {
 
             String content = new String(is.readAllBytes(), StandardCharsets.UTF_8);
-            return new FileContentResponse(path, content);
+            return content;
         } catch (Exception e) {
             log.error("Failed to read file: {}/{}", projectId, path, e);
             throw new RuntimeException("Failed to read file content", e);

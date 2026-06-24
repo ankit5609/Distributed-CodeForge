@@ -1,7 +1,6 @@
 package com.cybernode.ai.distributed_codeforge.account_service.security;
 
 import com.cybernode.ai.distributed_codeforge.common_lib.security.JwtAuthFilter;
-import jakarta.servlet.DispatcherType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -15,6 +14,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.context.RequestAttributeSecurityContextRepository;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
 @Configuration
@@ -32,6 +32,7 @@ public class AccountServiceSecurityConfig {
             httpSecurity
                     .csrf(csrfConfig-> csrfConfig.disable())
                     .cors(Customizer.withDefaults())
+                    .securityContext(sc -> sc.securityContextRepository(new RequestAttributeSecurityContextRepository()))
                     .sessionManagement(sessionConfig -> sessionConfig.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                     .authorizeHttpRequests(auth -> auth
                             .requestMatchers("/auth/**","/webhooks/**"

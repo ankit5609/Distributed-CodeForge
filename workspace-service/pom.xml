@@ -124,6 +124,7 @@
 		<dependency>
 			<groupId>com.cybernode.ai.distributed-codeforge</groupId>
 			<artifactId>common-lib</artifactId>
+			<version>1.0.0</version>
 		</dependency>
 
 	</dependencies>
@@ -136,11 +137,7 @@
 				<type>pom</type>
 				<scope>import</scope>
 			</dependency>
-			<dependency>
-				<groupId>com.cybernode.ai.distributed-codeforge</groupId>
-				<artifactId>common-lib</artifactId>
-				<version>1.0.0</version>
-			</dependency>
+
 		</dependencies>
 	</dependencyManagement>
 

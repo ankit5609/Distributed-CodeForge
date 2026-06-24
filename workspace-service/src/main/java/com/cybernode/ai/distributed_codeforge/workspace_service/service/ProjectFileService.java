@@ -1,12 +1,11 @@
 package com.cybernode.ai.distributed_codeforge.workspace_service.service;
 
-import com.cybernode.ai.distributed_codeforge.workspace_service.dto.project.FileContentResponse;
-import com.cybernode.ai.distributed_codeforge.workspace_service.dto.project.FileTreeResponse;
+import com.cybernode.ai.distributed_codeforge.common_lib.dto.FileTreeDto;
 
 public interface ProjectFileService {
-    FileTreeResponse getFileTree(Long projectId);
+    FileTreeDto getFileTree(Long projectId);
 
-    FileContentResponse getFileContent(Long projectId, String path);
+    String getFileContent(Long projectId, String path);
 
     void saveFile(String filePath, String fileContent, Long projectId);
 }

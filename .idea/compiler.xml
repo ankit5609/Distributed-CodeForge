@@ -11,9 +11,8 @@
         <module name="config-service" />
         <module name="common-lib" />
         <module name="discovery-service" />
-        <module name="intelligence-service" />
       </profile>
-      <profile name="Annotation profile for workspace-service" enabled="true">
+      <profile name="Annotation profile for account-service" enabled="true">
         <sourceOutputDir name="target/generated-sources/annotations" />
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
@@ -23,8 +22,9 @@
           <entry name="$MAVEN_REPOSITORY$/org/mapstruct/mapstruct-processor/1.6.0/mapstruct-processor-1.6.0.jar" />
           <entry name="$MAVEN_REPOSITORY$/org/mapstruct/mapstruct/1.6.0/mapstruct-1.6.0.jar" />
         </processorPath>
-        <module name="workspace-service" />
         <module name="account-service" />
+        <module name="workspace-service" />
+        <module name="intelligence-service" />
       </profile>
     </annotationProcessing>
   </component>

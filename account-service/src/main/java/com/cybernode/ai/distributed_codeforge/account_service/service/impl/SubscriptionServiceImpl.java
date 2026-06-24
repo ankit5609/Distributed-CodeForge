@@ -51,26 +51,22 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     }
 
     @Override
-    public void activateSubscription(Long userID, Long planID, String subscriptionID,
-                                     String customerId, Instant periodStart, Instant periodEnd) {
-        boolean exists=subscriptionRepository.existsByStripeSubscriptionId(subscriptionID);
-        if(exists) return;
+    public void activateSubscription(Long userId, Long planId, String subscriptionId, String customerId) {
 
-        User user=getUser(userID);
-        Plan plan=getPlan(planID);
+        boolean exists = subscriptionRepository.existsByStripeSubscriptionId(subscriptionId);
+        if (exists) return;
 
-        Subscription subscription=Subscription.builder()
+        User user = getUser(userId);
+        Plan plan = getPlan(planId);
+
+        Subscription subscription = Subscription.builder()
                 .user(user)
                 .plan(plan)
-                .stripeSubscriptionId(subscriptionID)
-                .status(SubscriptionStatus.ACTIVE)
-                .currentPeriodStart(periodStart)
-                .currentPeriodEnd(periodEnd)
-                .cancelAtPeriodEnd(false)
+                .stripeSubscriptionId(subscriptionId)
+                .status(SubscriptionStatus.INCOMPLETE)
                 .build();
 
         subscriptionRepository.save(subscription);
-
     }
 
     @Override
