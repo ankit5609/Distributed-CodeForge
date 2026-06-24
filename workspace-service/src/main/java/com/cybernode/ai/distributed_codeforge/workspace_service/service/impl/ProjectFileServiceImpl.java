@@ -12,6 +12,7 @@ import com.cybernode.ai.distributed_codeforge.workspace_service.service.ProjectF
 import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -64,6 +65,7 @@ public class ProjectFileServiceImpl implements ProjectFileService {
     }
 
     @Override
+    @Transactional
     public void saveFile(String filePath, String fileContent, Long projectId) {
         Project project=projectRepository.findById(projectId).orElseThrow(
                 ()->new ResourceNotFoundException("Project",projectId.toString())

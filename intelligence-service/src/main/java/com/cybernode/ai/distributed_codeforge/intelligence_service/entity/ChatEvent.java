@@ -1,6 +1,7 @@
 package com.cybernode.ai.distributed_codeforge.intelligence_service.entity;
 
 
+import com.cybernode.ai.distributed_codeforge.common_lib.enums.ChatEventStatus;
 import com.cybernode.ai.distributed_codeforge.common_lib.enums.ChatEventType;
 import jakarta.persistence.*;
 import lombok.*;
@@ -38,4 +39,11 @@ public class ChatEvent {
 
     @Column(columnDefinition = "text")
     String metadata;
+
+    String sagaId;
+
+    @Enumerated(EnumType.STRING)
+//    @Column(nullable = false)
+    ChatEventStatus status;
+
 }
