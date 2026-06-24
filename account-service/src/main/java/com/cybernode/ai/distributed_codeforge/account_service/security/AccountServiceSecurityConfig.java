@@ -36,8 +36,7 @@ public class AccountServiceSecurityConfig {
                     .securityContext(sc -> sc.securityContextRepository(new RequestAttributeSecurityContextRepository()))
                     .sessionManagement(sessionConfig -> sessionConfig.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                     .authorizeHttpRequests(auth -> auth
-                            .requestMatchers("/auth/**","/webhooks/**"
-                            ).permitAll()
+                            .requestMatchers("/auth/**","/webhooks/**","/actuator/**", "/internal/**").permitAll()
                             .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                             .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                             .anyRequest().authenticated()
