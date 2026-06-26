@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: config-service
-          image: ankit5609/codeforge-config-service:latest
+          image: ankit5609/codeforge-config-service
           imagePullPolicy: Always
           ports:
             - containerPort: 8888

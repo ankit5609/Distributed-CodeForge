@@ -54,7 +54,7 @@ spec:
       serviceAccountName: workspace-service-account
       containers:
         - name: workspace-service
-          image: ankit5609/codeforge-workspace-service:latest
+          image: ankit5609/codeforge-workspace-service
           imagePullPolicy: Always
           ports:
             - containerPort: 9020

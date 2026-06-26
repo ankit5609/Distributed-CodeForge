@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: api-gateway
-          image: ankit5609/codeforge-api-gateway-service:latest
+          image: ankit5609/codeforge-api-gateway
           imagePullPolicy: Always
           ports:
             - containerPort: 8080

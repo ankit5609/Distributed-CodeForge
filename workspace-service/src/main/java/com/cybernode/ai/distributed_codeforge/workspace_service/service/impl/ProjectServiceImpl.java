@@ -53,7 +53,7 @@ public class ProjectServiceImpl implements ProjectService {
                 isPublic(false).
                 build();
         project = projectRepository.save(project);
-        ProjectMemberId projectMemberId=new ProjectMemberId(project.getId(), userId);
+        ProjectMemberId projectMemberId=new ProjectMemberId(userId, project.getId());
         ProjectMember projectMember=ProjectMember.builder()
                 .id(projectMemberId)
                 .projectRole(ProjectRole.OWNER)

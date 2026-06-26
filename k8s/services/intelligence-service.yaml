@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: intelligence-service
-          image: ankit5609/codeforge-intelligence-service:latest
+          image: ankit5609/codeforge-intelligence-service
           imagePullPolicy: Always
           ports:
             - containerPort: 9030

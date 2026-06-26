@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: account-service
-          image: ankit5609/codeforge-account-service:latest
+          image: ankit5609/codeforge-account-service
           imagePullPolicy: Always
           ports:
             - containerPort: 9050      
@@ -52,6 +52,11 @@ spec:
                 secretKeyRef:
                   name: app-secrets
                   key: STRIPE_WEBHOOK_SECRET
+            - name: FRONTEND_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: codeforge-shared-config
+                  key: APP_FRONTEND_URL
           resources:
             requests:
               cpu: 100m

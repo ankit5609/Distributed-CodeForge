@@ -57,7 +57,7 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
         if(invitee.id().equals(userId)){
             throw new RuntimeException("Cannot invite yourself");
         }
-        ProjectMemberId projectMemberId=new ProjectMemberId(projectId, invitee.id());
+        ProjectMemberId projectMemberId=new ProjectMemberId(invitee.id(), projectId);
 
         if(projectMemberRepository.existsById(projectMemberId)){
             throw new RuntimeException("Cannot invite once again");
@@ -85,7 +85,7 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
             throw new RuntimeException("Invalid role Update");
         }
 
-        ProjectMemberId projectMemberId=new ProjectMemberId(projectId, memberId);
+        ProjectMemberId projectMemberId=new ProjectMemberId(memberId, projectId);
         ProjectMember projectMember=projectMemberRepository.findById(projectMemberId).orElseThrow();
         projectMember.setProjectRole(request.role());
         projectMemberRepository.save(projectMember);
@@ -100,7 +100,7 @@ public class ProjectMemberServiceImpl implements ProjectMemberService {
 
         Project project = getAccessibleProjectById(projectId, userId);
 
-        ProjectMemberId projectMemberId=new ProjectMemberId(projectId, memberId);
+        ProjectMemberId projectMemberId=new ProjectMemberId(memberId, projectId);
 
         if(!projectMemberRepository.existsById(projectMemberId)){
             throw new RuntimeException("Invalid member");

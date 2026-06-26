@@ -16,8 +16,8 @@ public class CorsConfig {
     public CorsWebFilter corsWebFilter() {
         CorsConfiguration corsConfig = new CorsConfiguration();
         corsConfig.setAllowedOrigins(Arrays.asList(
-                "http://ankitdev.in",
-                "http://www.ankitdev.in",
+                "http://codeforge.arclite.site",
+                "http://www.codeforge.arclite.site",
                 "http://localhost:5173"
         ));
         corsConfig.setMaxAge(3600L);
