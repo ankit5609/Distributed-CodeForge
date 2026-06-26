@@ -54,9 +54,10 @@ public class KubernetesDeploymentServiceImpl implements DeploymentService {
             registerRoute(domain, existingPod);
             
             try {
-                // Run npm install to pick up any new dependencies (e.g. framer-motion) and restart Vite
-                String startCmd = "npm install && pkill -f 'npm run dev' || true && nohup npm run dev -- --host 0.0.0.0 --port 5173 > /app/dev.log 2>&1 &";
-                execCommand(podName, "runner", "sh", "-c", startCmd);
+                // Step 1: npm install (blocking - wait for it to fully finish)
+                execCommand(podName, "runner", "sh", "-c", "npm install");
+                // Step 2: Kill any existing Vite process, then start Vite in background
+                execCommand(podName, "runner", "sh", "-c", "pkill -f 'npm run dev' || true; pkill -f vite || true; nohup npm run dev -- --host 0.0.0.0 --port 5173 > /app/dev.log 2>&1 &");
             } catch (Exception e) {
                 log.warn("Failed to restart dev server on existing pod {}, attempting clean redeploy...", podName, e);
                 client.pods().inNamespace(namespace).withName(podName).delete();
@@ -120,8 +121,10 @@ public class KubernetesDeploymentServiceImpl implements DeploymentService {
             String watchCmd = String.format("nohup mc mirror --overwrite --watch myminio/projects/%d/ /app/ > /app/sync.log 2>&1 &", projectId);
             execCommand(podName, "syncer", "sh", "-c", watchCmd);
 
-            String startCmd = "npm install && nohup npm run dev -- --host 0.0.0.0 --port 5173 > /app/dev.log 2>&1 &";
-            execCommand(podName, "runner", "sh", "-c", startCmd);
+            // Step 1: npm install (blocking - wait for it to fully finish before starting Vite)
+            execCommand(podName, "runner", "sh", "-c", "npm install");
+            // Step 2: Start Vite in background
+            execCommand(podName, "runner", "sh", "-c", "nohup npm run dev -- --host 0.0.0.0 --port 5173 > /app/dev.log 2>&1 &");
 
             Pod updatedPod = client.pods().inNamespace(namespace).withName(podName).get();
             registerRoute(domain, updatedPod);
