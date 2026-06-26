@@ -114,7 +114,7 @@ public class KubernetesDeploymentServiceImpl implements DeploymentService {
 
         try {
             killExistingWatchers(podName);
-            String initialSyncCmd = String.format("rm -rf /app/* && mc mirror --overwrite myminio/projects/%d/ /app/", projectId);
+            String initialSyncCmd = String.format("for f in /app/* /app/.[!.]*; do [ -e \"$f\" ] && [ \"$f\" != \"/app/node_modules\" ] && rm -rf \"$f\"; done && mc mirror --overwrite myminio/projects/%d/ /app/", projectId);
             execCommand(podName, "syncer", "sh", "-c", initialSyncCmd);
 
             String watchCmd = String.format("nohup mc mirror --overwrite --watch myminio/projects/%d/ /app/ > /app/sync.log 2>&1 &", projectId);
@@ -182,7 +182,7 @@ public class KubernetesDeploymentServiceImpl implements DeploymentService {
 
         String podName = pod.getMetadata().getName();
         killExistingWatchers(podName);
-        execCommand(podName, "runner", "sh", "-c", "pkill -f 'npm run dev' || true; rm -rf /app/*");
+        execCommand(podName, "runner", "sh", "-c", "pkill -f 'npm run dev' || true; for f in /app/* /app/.[!.]*; do [ -e \"$f\" ] && [ \"$f\" != \"/app/node_modules\" ] && rm -rf \"$f\"; done");
 
         client.pods().inNamespace(namespace).withName(podName).edit(p -> {
             p.getMetadata().getLabels().put(POOL_LABEL, IDLE);
