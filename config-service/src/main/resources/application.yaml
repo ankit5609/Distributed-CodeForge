@@ -20,9 +20,7 @@ management:
   health:
     config:
       enabled: false
-
 ---
-
 spring:
   config:
     activate:
