@@ -24,6 +24,9 @@ import com.cybernode.ai.distributed_codeforge.intelligence_service.service.Usage
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -67,6 +70,14 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         SecurityContext securityContext = SecurityContextHolder.getContext();
         ChatSession chatSession=createChatSessionIfNotExists(projectId,userId);
 
+        // Load prior turns for THIS project+user only (chatSession is keyed by ChatSessionId(projectId, userId),
+        // so this can never pull in another project's history).
+        List<Message> history = chatMessageRepository.findByChatSession(chatSession).stream()
+                .map(m -> m.getRole() == MessageRole.USER
+                        ? (Message) new UserMessage(m.getContent())
+                        : (Message) new AssistantMessage(m.getContent() == null ? "" : m.getContent()))
+                .toList();
+
         Map<String,Object> advisorParams=Map.of(
                 "userId",userId,
                 "projectId",projectId
@@ -81,6 +92,7 @@ public class AiGenerationServiceImpl implements AiGenerationService {
 
         return chatClient.prompt()
                 .system(PromptUtils.CODE_GENERATION_SYSTEM_PROMPT)
+                .messages(history)
                 .user(userMessage)
                 .tools(codeGenerationTools)
                 .advisors(advisorSpec -> {

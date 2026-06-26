@@ -5,4 +5,5 @@ import com.cybernode.ai.distributed_codeforge.workspace_service.dto.project.Depl
 
 public interface DeploymentService {
     DeployResponse deploy(Long projectId);
+    void release(Long projectId);
 }
