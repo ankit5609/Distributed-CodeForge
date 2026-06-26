@@ -8,7 +8,7 @@ on:
       - 'intelligence-service/**'
 
 env:
-  SERVICE_NAME: account-service
+  SERVICE_NAME: intelligence-service
   IMAGE_NAME: ankit5609/codeforge-intelligence-service
 
 permissions:
