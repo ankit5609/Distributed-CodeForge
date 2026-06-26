@@ -56,8 +56,10 @@ public class KubernetesDeploymentServiceImpl implements DeploymentService {
             try {
                 // Step 1: npm install (blocking - wait for it to fully finish)
                 execCommand(podName, "runner", "sh", "-c", "npm install");
-                // Step 2: Kill any existing Vite process, then start Vite in background
-                execCommand(podName, "runner", "sh", "-c", "pkill -f 'npm run dev' || true; pkill -f vite || true; nohup npm run dev -- --host 0.0.0.0 --port 5173 > /app/dev.log 2>&1 &");
+                // Step 2: Kill existing Vite by port (fuser kills the process holding 5173/tcp)
+                execCommand(podName, "runner", "sh", "-c", "fuser -k 5173/tcp 2>/dev/null || pkill -9 -f vite 2>/dev/null || true; sleep 1");
+                // Step 3: Start fresh Vite in background
+                execCommand(podName, "runner", "sh", "-c", "nohup npm run dev -- --host 0.0.0.0 --port 5173 > /app/dev.log 2>&1 &");
             } catch (Exception e) {
                 log.warn("Failed to restart dev server on existing pod {}, attempting clean redeploy...", podName, e);
                 client.pods().inNamespace(namespace).withName(podName).delete();
@@ -123,7 +125,9 @@ public class KubernetesDeploymentServiceImpl implements DeploymentService {
 
             // Step 1: npm install (blocking - wait for it to fully finish before starting Vite)
             execCommand(podName, "runner", "sh", "-c", "npm install");
-            // Step 2: Start Vite in background
+            // Step 2: Ensure port 5173 is free (kill by port, not by process name)
+            execCommand(podName, "runner", "sh", "-c", "fuser -k 5173/tcp 2>/dev/null || pkill -9 -f vite 2>/dev/null || true; sleep 1");
+            // Step 3: Start Vite in background
             execCommand(podName, "runner", "sh", "-c", "nohup npm run dev -- --host 0.0.0.0 --port 5173 > /app/dev.log 2>&1 &");
 
             Pod updatedPod = client.pods().inNamespace(namespace).withName(podName).get();
@@ -185,7 +189,7 @@ public class KubernetesDeploymentServiceImpl implements DeploymentService {
 
         String podName = pod.getMetadata().getName();
         killExistingWatchers(podName);
-        execCommand(podName, "runner", "sh", "-c", "pkill -f 'npm run dev' || true; for f in /app/* /app/.[!.]*; do [ -e \"$f\" ] && [ \"$f\" != \"/app/node_modules\" ] && rm -rf \"$f\"; done");
+        execCommand(podName, "runner", "sh", "-c", "fuser -k 5173/tcp 2>/dev/null || pkill -9 -f vite 2>/dev/null || true; for f in /app/* /app/.[!.]*; do [ -e \"$f\" ] && [ \"$f\" != \"/app/node_modules\" ] && rm -rf \"$f\"; done");
 
         client.pods().inNamespace(namespace).withName(podName).edit(p -> {
             p.getMetadata().getLabels().put(POOL_LABEL, IDLE);
