@@ -66,4 +66,13 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(apiError.status()).body(apiError);
     }
 
+    // Catch-all handler for any unhandled generic exceptions (like RuntimeException or StripeException).
+    // This ensures they are serialized into a clean JSON response with an HTTP 500 status rather than returning a blank 200 OK.
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ApiError> handleGenericException(Exception ex) {
+        ApiError apiError = new ApiError(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred: " + ex.getMessage());
+        log.error("Generic exception occurred: {}", ex.getMessage(), ex);
+        return ResponseEntity.status(apiError.status()).body(apiError);
+    }
+
 }

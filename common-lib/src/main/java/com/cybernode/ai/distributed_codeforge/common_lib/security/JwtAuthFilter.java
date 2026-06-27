@@ -28,30 +28,27 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
-        try {
-            log.info("incoming requests: {}", request.getRequestURI());
-            final String requestHeaderToken = request.getHeader("Authorization");
-            if (requestHeaderToken == null || !requestHeaderToken.startsWith("Bearer ")) {
-                filterChain.doFilter(request, response);
+        log.info("incoming requests: {}", request.getRequestURI());
+        final String requestHeaderToken = request.getHeader("Authorization");
+        if (requestHeaderToken != null && requestHeaderToken.startsWith("Bearer ")) {
+            try {
+                // Wrap only JWT processing in try-catch block so that token errors can be resolved.
+                // Exceptions thrown downstream by controllers/services are allowed to propagate normally.
+                String jwtToken = requestHeaderToken.split(("Bearer "))[1];
+                JwtUserPrincipal user = authUtil.verifyAccessToken(jwtToken);
+                if (user != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                    UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(
+                            user, jwtToken, user.authorities()
+                    );
+                    SecurityContextHolder.getContext().setAuthentication(authenticationToken);
+                    securityContextRepository.saveContext(SecurityContextHolder.getContext(), request, response);
+                }
+            } catch (Exception e) {
+                log.error("JWT authentication failed: {}", e.getMessage());
+                handlerExceptionResolver.resolveException(request, response, null, e);
                 return;
             }
-
-            String jwtToken = requestHeaderToken.split(("Bearer "))[1];
-
-            JwtUserPrincipal user = authUtil.verifyAccessToken(jwtToken);
-            if (user != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(
-                        user, jwtToken, user.authorities()
-                );
-                SecurityContextHolder.getContext().setAuthentication(authenticationToken);
-                securityContextRepository.saveContext(SecurityContextHolder.getContext(), request, response);
-            }
-            filterChain.doFilter(request, response);
         }
-        catch(Exception e){
-            handlerExceptionResolver.resolveException(request,response,null,e);
-        }
-
-
+        filterChain.doFilter(request, response);
     }
 }
