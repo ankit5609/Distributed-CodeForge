@@ -34,20 +34,40 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     private final UserRepository userRepository;
     private final PlanRepository planRepository;
 
-    private final Integer FREE_TIER_PROJECTS_ALLOWED=100;
+    @org.springframework.beans.factory.annotation.Value("${app.billing.mode:LOCAL}")
+    private String billingMode;
+
+    private final Integer FREE_TIER_PROJECTS_ALLOWED=0;
 
     @Override
     public SubscriptionResponse getCurrentSubscription() {
         Long userId=authUtil.getCurrentUserId();
         var currentSubscription= subscriptionRepository.findByUserIdAndStatusIn(userId, Set.of(
-                SubscriptionStatus.ACTIVE,SubscriptionStatus.PAST_DUE,
-                SubscriptionStatus.TRIALING
+                SubscriptionStatus.ACTIVE, SubscriptionStatus.PAST_DUE,
+                SubscriptionStatus.TRIALING, SubscriptionStatus.DEMO_LOCKED
         )).orElse(null);
         if (currentSubscription == null) {
-            return new SubscriptionResponse(null, "NONE", null, null);
+            return new SubscriptionResponse(null, "NONE", null, null, null);
         }
 
-        return planSubscriptionMapper.toSubscriptionResponse(currentSubscription);
+        SubscriptionResponse response = planSubscriptionMapper.toSubscriptionResponse(currentSubscription);
+        
+        // If the subscription is DEMO_LOCKED, return a custom warning message for the UI
+        if (currentSubscription.getStatus() == SubscriptionStatus.DEMO_LOCKED) {
+            String warningMsg = "Your payment was successfully processed using Stripe Test Mode. " +
+                    "This project is intended for learning and demonstration purposes. " +
+                    "Although the payment flow completed successfully, premium resources remain unavailable " +
+                    "because no real payment was processed.";
+            return new SubscriptionResponse(
+                    response.plan(),
+                    response.status(),
+                    response.currentPeriodEnd(),
+                    response.tokensUsedThisCycle(),
+                    warningMsg
+            );
+        }
+
+        return response;
     }
 
     @Override
@@ -74,8 +94,10 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     public void updateSubscription(String gatewaySubscriptionId, SubscriptionStatus status, Instant periodStart, Instant periodEnd, Boolean cancelAtPeriodEnd, Long planId) {
         Subscription subscription=getSubscription(gatewaySubscriptionId);
         boolean hasSubscriptionUpdated=false;
-        if(status!=null && status!=subscription.getStatus()){
-            subscription.setStatus(status);
+        
+        SubscriptionStatus finalStatus = adjustStatusForDemoMode(status);
+        if(finalStatus!=null && finalStatus!=subscription.getStatus()){
+            subscription.setStatus(finalStatus);
             hasSubscriptionUpdated=true;
         }
 
@@ -127,7 +149,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         subscription.setCurrentPeriodEnd(periodEnd);
 
         if(subscription.getStatus() == SubscriptionStatus.PAST_DUE || subscription.getStatus() == SubscriptionStatus.INCOMPLETE){
-            subscription.setStatus(SubscriptionStatus.ACTIVE);
+            subscription.setStatus(adjustStatusForDemoMode(SubscriptionStatus.ACTIVE));
         }
 
         log.info("sub={}", gatewaySubscriptionId);
@@ -163,11 +185,24 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     @Override
     public PlanDto getCurrentSubscribedPlanByUser() {
         SubscriptionResponse subscriptionResponse = getCurrentSubscription();
+        if (subscriptionResponse == null || "NONE".equals(subscriptionResponse.status()) || "DEMO_LOCKED".equals(subscriptionResponse.status())) {
+            // [DEMO MODE / NO ACTIVE SUB]: Enforce Free plan limits for workspace-service and intelligence-service
+            return new PlanDto(null, "FREE", FREE_TIER_PROJECTS_ALLOWED, 5000, false, "0");
+        }
         return subscriptionResponse.plan();
     }
 
 
     /// Utility methods
+
+    private SubscriptionStatus adjustStatusForDemoMode(SubscriptionStatus status) {
+        if ("DEMO".equalsIgnoreCase(billingMode)) {
+            if (status == SubscriptionStatus.ACTIVE || status == SubscriptionStatus.TRIALING) {
+                return SubscriptionStatus.DEMO_LOCKED;
+            }
+        }
+        return status;
+    }
 
     private User getUser(Long userId){
         return userRepository.findById(userId).orElseThrow(()-> new ResourceNotFoundException("User",userId.toString()));

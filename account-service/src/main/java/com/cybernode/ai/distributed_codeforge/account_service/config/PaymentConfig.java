@@ -15,4 +15,12 @@ public class PaymentConfig {
     public void init() {
         Stripe.apiKey = stripeSecretKey;
     }
+
+    @org.springframework.context.annotation.Bean
+    public org.apache.kafka.clients.admin.NewTopic subscriptionEventsTopic() {
+        return org.springframework.kafka.config.TopicBuilder.name("subscription-events")
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
 }

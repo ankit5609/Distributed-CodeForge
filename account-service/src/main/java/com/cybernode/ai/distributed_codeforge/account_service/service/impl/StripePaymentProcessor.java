@@ -7,24 +7,19 @@ import com.cybernode.ai.distributed_codeforge.account_service.entity.Plan;
 import com.cybernode.ai.distributed_codeforge.account_service.entity.User;
 import com.cybernode.ai.distributed_codeforge.account_service.repository.PlanRepository;
 import com.cybernode.ai.distributed_codeforge.account_service.repository.UserRepository;
+import com.cybernode.ai.distributed_codeforge.account_service.repository.StripeEventRepository;
 import com.cybernode.ai.distributed_codeforge.account_service.service.PaymentProcessor;
 import com.cybernode.ai.distributed_codeforge.account_service.service.SubscriptionService;
-import com.cybernode.ai.distributed_codeforge.common_lib.enums.SubscriptionStatus;
 import com.cybernode.ai.distributed_codeforge.common_lib.error.BadRequestException;
 import com.cybernode.ai.distributed_codeforge.common_lib.error.ResourceNotFoundException;
 import com.cybernode.ai.distributed_codeforge.common_lib.security.AuthUtil;
-import com.stripe.StripeClient;
 import com.stripe.exception.StripeException;
-import com.stripe.model.*;
 import com.stripe.model.checkout.Session;
 import com.stripe.param.checkout.SessionCreateParams;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-
-import java.time.Instant;
-import java.util.Map;
 
 @Slf4j
 @Service
@@ -35,9 +30,14 @@ public class StripePaymentProcessor implements PaymentProcessor {
     private final PlanRepository planRepository;
     private final UserRepository userRepository;
     private final SubscriptionService subscriptionService;
+    private final StripeEventRepository stripeEventRepository;
+    private final org.springframework.kafka.core.KafkaTemplate<String, Object> kafkaTemplate;
 
     @Value("${app.frontend.url}")
     private String frontendUrl;
+
+    @Value("${stripe.webhook.secret}")
+    private String webhookSecret;
 
     @Override
     public CheckoutResponse createCheckoutSessionUrl(CheckoutRequest request) {
@@ -103,137 +103,151 @@ public class StripePaymentProcessor implements PaymentProcessor {
     }
 
     @Override
-    public void handleWebhookEvent(String type, StripeObject stripeObject, Map<String, String> metadata) {
-        log.debug("Handling stripe event: {}", type);
-
-        switch (type) {
-            case "checkout.session.completed" -> handleCheckoutSessionCompleted((Session) stripeObject, metadata); // one-time, on checkout completed
-            case "customer.subscription.updated" -> handleCustomerSubscriptionUpdated((Subscription) stripeObject); // when user cancels, upgrades or any updates
-            case "customer.subscription.deleted" -> handleCustomerSubscriptionDeleted((Subscription) stripeObject); // when subscription ends, revoke the access
-            case "invoice.paid" -> handleInvoicePaid((Invoice) stripeObject); // when invoice is paid
-            case "invoice.payment_failed" -> handleInvoicePaymentFailed((Invoice) stripeObject); // when invoice is not paid, mark as PAST_DUE
-            default -> log.debug("Ignoring the event: {}", type);
-        }
-    }
-
-    private void handleCheckoutSessionCompleted(Session session, Map<String, String> metadata) {
-        if(session == null) {
-            log.error("session object was null");
-            return;
-        }
-
-        Long userId = Long.parseLong(metadata.get("user_id"));
-        Long planId = Long.parseLong(metadata.get("plan_id"));
-
-        String subscriptionId = session.getSubscription();
-        String customerId = session.getCustomer();
-
-        User user = getUser(userId);
-        if(user.getStripeCustomerId() == null) {
-            user.setStripeCustomerId(customerId);
-            userRepository.save(user);
-        }
-
-        subscriptionService.activateSubscription(userId, planId, subscriptionId, customerId);
-    }
-
-    private void handleCustomerSubscriptionUpdated(Subscription subscription) {
-        if (subscription == null) {
-            log.error("subscription object was null inside handleCustomerSubscriptionUpdated");
-            return;
-        }
-
-        SubscriptionStatus status = mapStripeStatusToEnum(subscription.getStatus());
-        if (status == null) {
-            log.warn("Unknown status '{}' for subscription {}", subscription.getStatus(), subscription.getId());
-            return;
-        }
-
-        SubscriptionItem item = subscription.getItems().getData().get(0);
-        Instant periodStart = toInstant(item.getCurrentPeriodStart());
-        Instant periodEnd = toInstant(item.getCurrentPeriodEnd());
-
-        Long planId = resolvePlanId(item.getPrice());
-
-        subscriptionService.updateSubscription(
-                subscription.getId(), status, periodStart, periodEnd,
-                subscription.getCancelAtPeriodEnd(), planId
-        );
-
-    }
-
-    private void handleCustomerSubscriptionDeleted(Subscription subscription) {
-        if (subscription == null) {
-            log.error("subscription object was null inside handleCustomerSubscriptionDeleted");
-            return;
-        }
-        subscriptionService.cancelSubscription(subscription.getId());
-    }
-
-    private void handleInvoicePaid(Invoice invoice) {
-        String subId = extractSubscriptionId(invoice);
-        if(subId == null) return;
-
+    public void processWebhook(String payload, String sigHeader) {
         try {
-            Subscription subscription = Subscription.retrieve(subId); //sdk calling the Stripe server
-            var item = subscription.getItems().getData().get(0);
+            com.stripe.model.Event event = com.stripe.net.Webhook.constructEvent(payload, sigHeader, webhookSecret);
 
-            Instant periodStart = toInstant(item.getCurrentPeriodStart());
-            Instant periodEnd = toInstant(item.getCurrentPeriodEnd());
-
-            subscriptionService.renewSubscriptionPeriod(
-                    subId,
-                    periodStart,
-                    periodEnd
-            );
-
-        } catch (StripeException e) {
-            throw new RuntimeException(e);
-        }
-
-    }
-
-    private void handleInvoicePaymentFailed(Invoice invoice) {
-        String subId = extractSubscriptionId(invoice);
-        if(subId == null) return;
-
-        subscriptionService.markSubscriptionPastDue(subId);
-    }
-
-
-    /// // Utility Methods
-
-    private User getUser(Long userId) {
-        return userRepository.findById(userId).orElseThrow(() ->
-                new ResourceNotFoundException("user", userId.toString()));
-    }
-
-    private SubscriptionStatus mapStripeStatusToEnum(String status) {
-        return switch (status) {
-            case "active" -> SubscriptionStatus.ACTIVE;
-            case "trialing" -> SubscriptionStatus.TRIALING;
-            case "past_due", "unpaid", "paused", "incomplete_expired" -> SubscriptionStatus.PAST_DUE;
-            case "canceled" -> SubscriptionStatus.CANCELED;
-            case "incomplete" -> SubscriptionStatus.INCOMPLETE;
-            default -> {
-                log.warn("Unmapped Stripe status: {}", status);
-                yield null;
+            // [IDEMPOTENCY]: Avoid double processing of webhooks
+            if (stripeEventRepository.existsById(event.getId())) {
+                log.warn("Duplicate Stripe webhook event received: {}. Ignoring.", event.getId());
+                return;
             }
-        };
+
+            // Persist Event ID immediately
+            stripeEventRepository.save(com.cybernode.ai.distributed_codeforge.account_service.entity.StripeEvent.builder()
+                    .id(event.getId())
+                    .receivedAt(java.time.Instant.now())
+                    .build());
+
+            com.stripe.model.EventDataObjectDeserializer deserializer = event.getDataObjectDeserializer();
+            com.stripe.model.StripeObject stripeObject = null;
+
+            if (deserializer.getObject().isPresent()) {
+                stripeObject = deserializer.getObject().get();
+            } else {
+                try {
+                    stripeObject = deserializer.deserializeUnsafe();
+                    if (stripeObject == null) {
+                        log.warn("Failed to deserialize webhook object for event: {}", event.getType());
+                        return;
+                    }
+                } catch (Exception e) {
+                    log.error("Unsafe deserialization failed for event {}: {}", event.getType(), e.getMessage());
+                    throw new BadRequestException("Deserialization failed");
+                }
+            }
+
+            java.util.Map<String, String> metadata = new java.util.HashMap<>();
+            if (stripeObject instanceof Session session) {
+                metadata = session.getMetadata();
+                // Also update the user's stripeCustomerId if present in session
+                String customerId = session.getCustomer();
+                String userIdStr = metadata.get("user_id");
+                if (userIdStr != null && customerId != null) {
+                    Long userId = Long.parseLong(userIdStr);
+                    User user = getUser(userId);
+                    if (user.getStripeCustomerId() == null) {
+                        user.setStripeCustomerId(customerId);
+                        userRepository.save(user);
+                        log.info("Saved stripe customer ID {} for user ID {}", customerId, userId);
+                    }
+                }
+            }
+
+            // [EVENT DRIVEN ARCHITECTURE]: Map Stripe webhook to internal Kafka SubscriptionEvent
+            com.cybernode.ai.distributed_codeforge.common_lib.event.SubscriptionEvent subEvent = mapStripeToSubscriptionEvent(event.getType(), stripeObject, metadata);
+            if (subEvent != null) {
+                kafkaTemplate.send("subscription-events", subEvent.subscriptionId(), subEvent);
+                log.info("Published subscription lifecycle event: {} to Kafka", subEvent);
+            } else {
+                log.debug("Skipped mapping/publishing for Stripe event type: {}", event.getType());
+            }
+
+        } catch (com.stripe.exception.SignatureVerificationException e) {
+            log.error("Signature verification failed: {}", e.getMessage());
+            throw new BadRequestException("Invalid Stripe signature");
+        } catch (Exception e) {
+            log.error("Stripe webhook processing failed", e);
+            throw new RuntimeException("Webhook processing error", e);
+        }
     }
 
-    private Instant toInstant(Long epoch) {
-        return epoch != null ? Instant.ofEpochSecond(epoch) : null;
+    private com.cybernode.ai.distributed_codeforge.common_lib.event.SubscriptionEvent mapStripeToSubscriptionEvent(String type, com.stripe.model.StripeObject stripeObject, java.util.Map<String, String> metadata) {
+        switch (type) {
+            case "checkout.session.completed" -> {
+                if (stripeObject instanceof Session session) {
+                    return new com.cybernode.ai.distributed_codeforge.common_lib.event.SubscriptionEvent(
+                            "ACTIVATED",
+                            Long.parseLong(metadata.get("user_id")),
+                            Long.parseLong(metadata.get("plan_id")),
+                            session.getSubscription(),
+                            session.getCustomer(),
+                            "incomplete",
+                            null, null, null
+                    );
+                }
+            }
+            case "customer.subscription.updated" -> {
+                if (stripeObject instanceof com.stripe.model.Subscription subscription) {
+                    var item = subscription.getItems().getData().get(0);
+                    return new com.cybernode.ai.distributed_codeforge.common_lib.event.SubscriptionEvent(
+                            "UPDATED",
+                            null, null,
+                            subscription.getId(),
+                            subscription.getCustomer(),
+                            subscription.getStatus(),
+                            java.time.Instant.ofEpochSecond(item.getCurrentPeriodStart()),
+                            java.time.Instant.ofEpochSecond(item.getCurrentPeriodEnd()),
+                            subscription.getCancelAtPeriodEnd()
+                    );
+                }
+            }
+            case "customer.subscription.deleted" -> {
+                if (stripeObject instanceof com.stripe.model.Subscription subscription) {
+                    return new com.cybernode.ai.distributed_codeforge.common_lib.event.SubscriptionEvent(
+                            "CANCELLED",
+                            null, null,
+                            subscription.getId(),
+                            subscription.getCustomer(),
+                            "canceled",
+                            null, null, null
+                    );
+                }
+            }
+            case "invoice.paid" -> {
+                if (stripeObject instanceof com.stripe.model.Invoice invoice) {
+                    String subId = extractSubscriptionId(invoice);
+                    if (subId != null) {
+                        return new com.cybernode.ai.distributed_codeforge.common_lib.event.SubscriptionEvent(
+                                "INVOICE_PAID",
+                                null, null,
+                                subId,
+                                invoice.getCustomer(),
+                                null, null, null, null
+                        );
+                    }
+                }
+            }
+            case "invoice.payment_failed" -> {
+                if (stripeObject instanceof com.stripe.model.Invoice invoice) {
+                    String subId = extractSubscriptionId(invoice);
+                    if (subId != null) {
+                        return new com.cybernode.ai.distributed_codeforge.common_lib.event.SubscriptionEvent(
+                                "INVOICE_PAYMENT_FAILED",
+                                null, null,
+                                subId,
+                                invoice.getCustomer(),
+                                "past_due",
+                                null, null, null
+                        );
+                    }
+                }
+            }
+        }
+        return null;
     }
 
-    private Long resolvePlanId(Price price) {
-        if (price == null || price.getId() == null) return null;
-        return planRepository.findByStripePriceId(price.getId())
-                .map(Plan::getId)
-                .orElse(null);
-    }
-
-    private String extractSubscriptionId(Invoice invoice) {
+    private String extractSubscriptionId(com.stripe.model.Invoice invoice) {
         var parent = invoice.getParent();
         if (parent == null) return null;
 
@@ -241,5 +255,10 @@ public class StripePaymentProcessor implements PaymentProcessor {
         if (subDetails == null) return null;
 
         return subDetails.getSubscription();
+    }
+
+    private User getUser(Long userId) {
+        return userRepository.findById(userId).orElseThrow(() ->
+                new ResourceNotFoundException("user", userId.toString()));
     }
 }

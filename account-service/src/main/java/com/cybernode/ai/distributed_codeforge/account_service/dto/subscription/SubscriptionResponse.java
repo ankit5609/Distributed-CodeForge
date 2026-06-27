@@ -8,6 +8,7 @@ public record SubscriptionResponse(
         PlanDto plan,
         String status,
         Instant currentPeriodEnd,
-        Long tokensUsedThisCycle
+        Long tokensUsedThisCycle,
+        String message
 ) {
 }

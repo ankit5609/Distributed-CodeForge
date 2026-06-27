@@ -10,6 +10,7 @@ import org.mapstruct.Mapper;
 @Mapper(componentModel = "spring")
 public interface PlanSubscriptionMapper {
 
+    @org.mapstruct.Mapping(target = "message", ignore = true)
     SubscriptionResponse toSubscriptionResponse(Subscription subscription);
 
     PlanDto toPlanResponse(Plan plan);
