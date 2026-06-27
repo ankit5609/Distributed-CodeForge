@@ -17,6 +17,7 @@ import com.cybernode.ai.distributed_codeforge.common_lib.security.AuthUtil;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -34,7 +35,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     private final UserRepository userRepository;
     private final PlanRepository planRepository;
 
-    @org.springframework.beans.factory.annotation.Value("${app.billing.mode:LOCAL}")
+    @Value("${app.billing.mode:LOCAL}")
     private String billingMode;
 
     private final Integer FREE_TIER_PROJECTS_ALLOWED=0;

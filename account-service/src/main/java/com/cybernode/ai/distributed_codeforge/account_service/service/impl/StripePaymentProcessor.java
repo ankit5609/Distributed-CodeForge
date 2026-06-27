@@ -4,22 +4,32 @@ import com.cybernode.ai.distributed_codeforge.account_service.dto.subscription.C
 import com.cybernode.ai.distributed_codeforge.account_service.dto.subscription.CheckoutResponse;
 import com.cybernode.ai.distributed_codeforge.account_service.dto.subscription.PortalResponse;
 import com.cybernode.ai.distributed_codeforge.account_service.entity.Plan;
+import com.cybernode.ai.distributed_codeforge.account_service.entity.StripeEvent;
 import com.cybernode.ai.distributed_codeforge.account_service.entity.User;
 import com.cybernode.ai.distributed_codeforge.account_service.repository.PlanRepository;
-import com.cybernode.ai.distributed_codeforge.account_service.repository.UserRepository;
 import com.cybernode.ai.distributed_codeforge.account_service.repository.StripeEventRepository;
+import com.cybernode.ai.distributed_codeforge.account_service.repository.UserRepository;
 import com.cybernode.ai.distributed_codeforge.account_service.service.PaymentProcessor;
 import com.cybernode.ai.distributed_codeforge.account_service.service.SubscriptionService;
 import com.cybernode.ai.distributed_codeforge.common_lib.error.BadRequestException;
 import com.cybernode.ai.distributed_codeforge.common_lib.error.ResourceNotFoundException;
+import com.cybernode.ai.distributed_codeforge.common_lib.event.SubscriptionEvent;
 import com.cybernode.ai.distributed_codeforge.common_lib.security.AuthUtil;
+import com.stripe.exception.SignatureVerificationException;
 import com.stripe.exception.StripeException;
+import com.stripe.model.*;
 import com.stripe.model.checkout.Session;
+import com.stripe.net.Webhook;
 import com.stripe.param.checkout.SessionCreateParams;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
+
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -31,7 +41,7 @@ public class StripePaymentProcessor implements PaymentProcessor {
     private final UserRepository userRepository;
     private final SubscriptionService subscriptionService;
     private final StripeEventRepository stripeEventRepository;
-    private final org.springframework.kafka.core.KafkaTemplate<String, Object> kafkaTemplate;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
 
     @Value("${app.frontend.url}")
     private String frontendUrl;
@@ -105,7 +115,7 @@ public class StripePaymentProcessor implements PaymentProcessor {
     @Override
     public void processWebhook(String payload, String sigHeader) {
         try {
-            com.stripe.model.Event event = com.stripe.net.Webhook.constructEvent(payload, sigHeader, webhookSecret);
+            Event event = Webhook.constructEvent(payload, sigHeader, webhookSecret);
 
             // [IDEMPOTENCY]: Avoid double processing of webhooks
             if (stripeEventRepository.existsById(event.getId())) {
@@ -114,13 +124,13 @@ public class StripePaymentProcessor implements PaymentProcessor {
             }
 
             // Persist Event ID immediately
-            stripeEventRepository.save(com.cybernode.ai.distributed_codeforge.account_service.entity.StripeEvent.builder()
+            stripeEventRepository.save(StripeEvent.builder()
                     .id(event.getId())
                     .receivedAt(java.time.Instant.now())
                     .build());
 
-            com.stripe.model.EventDataObjectDeserializer deserializer = event.getDataObjectDeserializer();
-            com.stripe.model.StripeObject stripeObject = null;
+            EventDataObjectDeserializer deserializer = event.getDataObjectDeserializer();
+            StripeObject stripeObject = null;
 
             if (deserializer.getObject().isPresent()) {
                 stripeObject = deserializer.getObject().get();
@@ -137,7 +147,7 @@ public class StripePaymentProcessor implements PaymentProcessor {
                 }
             }
 
-            java.util.Map<String, String> metadata = new java.util.HashMap<>();
+            Map<String, String> metadata = new HashMap<>();
             if (stripeObject instanceof Session session) {
                 metadata = session.getMetadata();
                 // Also update the user's stripeCustomerId if present in session
@@ -155,7 +165,7 @@ public class StripePaymentProcessor implements PaymentProcessor {
             }
 
             // [EVENT DRIVEN ARCHITECTURE]: Map Stripe webhook to internal Kafka SubscriptionEvent
-            com.cybernode.ai.distributed_codeforge.common_lib.event.SubscriptionEvent subEvent = mapStripeToSubscriptionEvent(event.getType(), stripeObject, metadata);
+            SubscriptionEvent subEvent = mapStripeToSubscriptionEvent(event.getType(), stripeObject, metadata);
             if (subEvent != null) {
                 kafkaTemplate.send("subscription-events", subEvent.subscriptionId(), subEvent);
                 log.info("Published subscription lifecycle event: {} to Kafka", subEvent);
@@ -163,7 +173,7 @@ public class StripePaymentProcessor implements PaymentProcessor {
                 log.debug("Skipped mapping/publishing for Stripe event type: {}", event.getType());
             }
 
-        } catch (com.stripe.exception.SignatureVerificationException e) {
+        } catch (SignatureVerificationException e) {
             log.error("Signature verification failed: {}", e.getMessage());
             throw new BadRequestException("Invalid Stripe signature");
         } catch (Exception e) {
@@ -172,11 +182,11 @@ public class StripePaymentProcessor implements PaymentProcessor {
         }
     }
 
-    private com.cybernode.ai.distributed_codeforge.common_lib.event.SubscriptionEvent mapStripeToSubscriptionEvent(String type, com.stripe.model.StripeObject stripeObject, java.util.Map<String, String> metadata) {
+    private SubscriptionEvent mapStripeToSubscriptionEvent(String type, StripeObject stripeObject, Map<String, String> metadata) {
         switch (type) {
             case "checkout.session.completed" -> {
                 if (stripeObject instanceof Session session) {
-                    return new com.cybernode.ai.distributed_codeforge.common_lib.event.SubscriptionEvent(
+                    return new SubscriptionEvent(
                             "ACTIVATED",
                             Long.parseLong(metadata.get("user_id")),
                             Long.parseLong(metadata.get("plan_id")),
@@ -188,23 +198,23 @@ public class StripePaymentProcessor implements PaymentProcessor {
                 }
             }
             case "customer.subscription.updated" -> {
-                if (stripeObject instanceof com.stripe.model.Subscription subscription) {
+                if (stripeObject instanceof Subscription subscription) {
                     var item = subscription.getItems().getData().get(0);
-                    return new com.cybernode.ai.distributed_codeforge.common_lib.event.SubscriptionEvent(
+                    return new SubscriptionEvent(
                             "UPDATED",
                             null, null,
                             subscription.getId(),
                             subscription.getCustomer(),
                             subscription.getStatus(),
-                            java.time.Instant.ofEpochSecond(item.getCurrentPeriodStart()),
-                            java.time.Instant.ofEpochSecond(item.getCurrentPeriodEnd()),
+                            Instant.ofEpochSecond(item.getCurrentPeriodStart()),
+                            Instant.ofEpochSecond(item.getCurrentPeriodEnd()),
                             subscription.getCancelAtPeriodEnd()
                     );
                 }
             }
             case "customer.subscription.deleted" -> {
-                if (stripeObject instanceof com.stripe.model.Subscription subscription) {
-                    return new com.cybernode.ai.distributed_codeforge.common_lib.event.SubscriptionEvent(
+                if (stripeObject instanceof Subscription subscription) {
+                    return new SubscriptionEvent(
                             "CANCELLED",
                             null, null,
                             subscription.getId(),
@@ -215,10 +225,10 @@ public class StripePaymentProcessor implements PaymentProcessor {
                 }
             }
             case "invoice.paid" -> {
-                if (stripeObject instanceof com.stripe.model.Invoice invoice) {
+                if (stripeObject instanceof Invoice invoice) {
                     String subId = extractSubscriptionId(invoice);
                     if (subId != null) {
-                        return new com.cybernode.ai.distributed_codeforge.common_lib.event.SubscriptionEvent(
+                        return new SubscriptionEvent(
                                 "INVOICE_PAID",
                                 null, null,
                                 subId,
@@ -229,10 +239,10 @@ public class StripePaymentProcessor implements PaymentProcessor {
                 }
             }
             case "invoice.payment_failed" -> {
-                if (stripeObject instanceof com.stripe.model.Invoice invoice) {
+                if (stripeObject instanceof Invoice invoice) {
                     String subId = extractSubscriptionId(invoice);
                     if (subId != null) {
-                        return new com.cybernode.ai.distributed_codeforge.common_lib.event.SubscriptionEvent(
+                        return new SubscriptionEvent(
                                 "INVOICE_PAYMENT_FAILED",
                                 null, null,
                                 subId,
@@ -247,7 +257,7 @@ public class StripePaymentProcessor implements PaymentProcessor {
         return null;
     }
 
-    private String extractSubscriptionId(com.stripe.model.Invoice invoice) {
+    private String extractSubscriptionId(Invoice invoice) {
         var parent = invoice.getParent();
         if (parent == null) return null;
 

@@ -2,8 +2,11 @@ package com.cybernode.ai.distributed_codeforge.account_service.config;
 
 import com.stripe.Stripe;
 import jakarta.annotation.PostConstruct;
+import org.apache.kafka.clients.admin.NewTopic;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.config.TopicBuilder;
 
 @Configuration
 public class PaymentConfig {
@@ -16,9 +19,9 @@ public class PaymentConfig {
         Stripe.apiKey = stripeSecretKey;
     }
 
-    @org.springframework.context.annotation.Bean
-    public org.apache.kafka.clients.admin.NewTopic subscriptionEventsTopic() {
-        return org.springframework.kafka.config.TopicBuilder.name("subscription-events")
+    @Bean
+    public NewTopic subscriptionEventsTopic() {
+        return TopicBuilder.name("subscription-events")
                 .partitions(3)
                 .replicas(1)
                 .build();

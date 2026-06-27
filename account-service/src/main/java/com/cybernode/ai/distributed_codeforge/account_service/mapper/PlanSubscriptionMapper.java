@@ -6,11 +6,12 @@ import com.cybernode.ai.distributed_codeforge.account_service.entity.Plan;
 import com.cybernode.ai.distributed_codeforge.account_service.entity.Subscription;
 import com.cybernode.ai.distributed_codeforge.common_lib.dto.PlanDto;
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 
 @Mapper(componentModel = "spring")
 public interface PlanSubscriptionMapper {
 
-    @org.mapstruct.Mapping(target = "message", ignore = true)
+    @Mapping(target = "message", ignore = true)
     SubscriptionResponse toSubscriptionResponse(Subscription subscription);
 
     PlanDto toPlanResponse(Plan plan);
