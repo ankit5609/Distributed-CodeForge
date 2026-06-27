@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: intelligence-service
-          image: ankit5609/codeforge-intelligence-service
+          image: ankit5609/codeforge-intelligence-service@sha256:5f934a1b76b3cb26ec64fdfd4df5e131d40264cb4c661b79cb26a56068b83a72
           imagePullPolicy: Always
           ports:
             - containerPort: 9030

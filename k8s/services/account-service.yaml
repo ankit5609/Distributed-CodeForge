@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: account-service
-          image: ankit5609/codeforge-account-service@sha256:9cd41b4402f78855173458b0f577907af2e68191d5903e258e939eb5ca7faf73
+          image: ankit5609/codeforge-account-service@sha256:bf973501a2332e6c9f417ae3c58661d1bb707fcd4a3fced8f82bf4f20b74a7b3
           imagePullPolicy: Always
           ports:
             - containerPort: 9050      

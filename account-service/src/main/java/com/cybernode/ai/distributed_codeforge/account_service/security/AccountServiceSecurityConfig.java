@@ -37,7 +37,7 @@ public class AccountServiceSecurityConfig {
                     .sessionManagement(sessionConfig -> sessionConfig.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                     .authorizeHttpRequests(auth -> auth
                             .requestMatchers("/auth/**","/webhooks/**","/actuator/**", "/internal/**").permitAll()
-                            .requestMatchers("/v3/api-docs/**").permitAll()
+                            .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                             .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                             .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                             .anyRequest().authenticated()
