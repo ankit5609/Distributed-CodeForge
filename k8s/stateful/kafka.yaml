@@ -31,7 +31,13 @@ spec:
               name: controller
           env:
             - name: KAFKA_HEAP_OPTS
-              value: "-Xms512M -Xmx512M"
+              # [OPTIMIZED - 2025-06]: Reduced JVM heap from 512M to 256M.
+              # Previously 512M was set for production throughput (many topics, high message rate).
+              # For this showcase, Kafka is used only for file-store saga events (very low volume).
+              # 256M is sufficient and saves 256Mi of real RAM on GKE Autopilot.
+              # To restore: change back to "-Xms512M -Xmx512M"
+              # value: "-Xms512M -Xmx512M"  # old: production sizing
+              value: "-Xms256M -Xmx256M"
             - name: KAFKA_LOG4J_ROOT_LOGLEVEL
               value: "ERROR"
             - name: KAFKA_LOG4J_LOGGERS
@@ -66,11 +72,20 @@ spec:
               value: "6PMpHYL9QkeyXRj9Nrp4KA"
           resources:
             requests:
-              cpu: 250m
-              memory: 512Mi
+              # [OPTIMIZED - 2025-06]: Reduced from 250m/512Mi to 150m/384Mi.
+              # Kafka's minimum workable heap is 256M (set above). The request should exceed
+              # the heap by ~100Mi for JVM overhead. 384Mi request = 256Mi heap + ~128Mi overhead.
+              # cpu: 250m    # old: production — handles high-throughput topic partitions
+              # memory: 512Mi  # old: matched old 512M heap
+              cpu: 150m
+              memory: 384Mi
             limits:
-              cpu: 1000m
-              memory: 1Gi
+              # [OPTIMIZED - 2025-06]: Reduced CPU limit from 1000m to 500m.
+              # Single-node showcase Kafka never needs a full vCPU. 500m allows burst for startup.
+              # cpu: 1000m  # old: production — Kafka leader election and replication bursts
+              # memory: 1Gi  # old: production — headroom for large message batches
+              cpu: 500m
+              memory: 512Mi
           volumeMounts:
             - name: kafka-data
               mountPath: /var/lib/kafka/data

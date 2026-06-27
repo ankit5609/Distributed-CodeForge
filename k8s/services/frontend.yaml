@@ -15,7 +15,8 @@ spec:
     spec:
       containers:
         - name: codeforge-frontend
-          image: ankit5609/codeforge-frontend:latest
+          # [BUG FIX - 2025-06]: Using exact digest to bypass GKE's containerd cache
+          image: ankit5609/codeforge-frontend@sha256:ae77097185aff80295f05902c0514d58339e754ce54ee1b771544cd0a00753b5
           imagePullPolicy: Always
           ports:
             - containerPort: 80

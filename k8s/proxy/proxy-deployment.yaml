@@ -17,17 +17,29 @@ spec:
     spec:
       containers:
         - name: codeforge-me-proxy
-          image: ankit5609/codeforge-me-proxy:latest
+          # [BUG FIX - 2025-06]: Using exact digest to bypass GKE's containerd tag/manifest cache
+          image: ankit5609/codeforge-me-proxy@sha256:c2f2961d031d3a3e202751dcdcee64e965a3a13b80c8a8a876af7cd4a26aa920
           imagePullPolicy: Always
           ports:
             - containerPort: 80
           resources:
             requests:
-              cpu: "250m"
-              memory: "512Mi"
+              # [OPTIMIZED - 2025-06]: Reduced from 250m/512Mi to 100m/128Mi.
+              # The proxy is a lightweight Node.js reverse proxy (http-proxy) that only forwards
+              # TCP connections to runner pods. It does no computation, so 250m CPU was overkill.
+              # For a showcase with ~1 active preview at a time, 100m/128Mi is more than sufficient.
+              # Restore to cpu: 250m / memory: 512Mi for production with many concurrent previews.
+              # cpu: "250m"    # old: production — handles many concurrent WebSocket connections
+              # memory: "512Mi"  # old: production — buffer for many simultaneous proxy streams
+              cpu: "100m"
+              memory: "128Mi"
             limits:
+              # [OPTIMIZED - 2025-06]: Reduced from 250m/512Mi to 250m/256Mi.
+              # Keeping CPU limit at 250m to allow short bursts when multiple tabs hit preview.
+              # cpu: "250m"    # old: same as requests (capped)
+              # memory: "512Mi"  # old: production headroom for many streams
               cpu: "250m"
-              memory: "512Mi"
+              memory: "256Mi"
           envFrom:
             - configMapRef:
                 name: codeforge-shared-config

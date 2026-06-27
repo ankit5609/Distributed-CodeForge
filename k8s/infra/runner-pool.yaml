@@ -4,11 +4,25 @@ metadata:
   name: runner-pool
   namespace: codeforge-previews
 spec:
-  replicas: 2
+  # [OPTIMIZED - 2025-06]: Reduced from 2 to 1 replica.
+  # Previously 2 replicas were kept "warm" to reduce cold-start wait times for concurrent users.
+  # For this showcase project (single user at a time), 1 is sufficient.
+  # The workspace-service already recycles the pod when needed, so the pool never runs dry.
+  # To restore production behavior: change back to: replicas: 2
+  # replicas: 2  # old: production default — 2 warm runners for concurrent users
+  replicas: 1
+
   selector:
     matchLabels:
       app: runner
-      status: idle
+      # [BUG FIX - 2025-06]: Removed "status: idle" from selector — it caused a pod LEAK.
+      # When workspace-service changed a pod's label to "status: busy", the Deployment
+      # controller saw the pod no longer matched the selector and immediately spawned a NEW
+      # idle pod to replace it. The old "busy" pod became an orphan — never cleaned up,
+      # running indefinitely and burning GKE Autopilot resources/money.
+      # Fix: selector only matches on "app: runner". The status label is still applied on
+      # pod templates so workspace-service can filter idle vs busy pods via label queries.
+      # status: idle  # old: caused deployment to spawn replacement pods when runner was claimed
   template:
     metadata:
       labels:
@@ -31,9 +45,19 @@ spec:
             - containerPort: 5173
           resources:
             requests:
+              # [OPTIMIZED]: Restored to 250m CPU and 512Mi memory.
+              # We tried reducing this to 100m/256Mi, but GKE Autopilot throttles network
+              # and disk I/O proportionally to the CPU request. At 100m CPU, 'npm install'
+              # took more than 2 minutes and triggered backend timeouts. Keep at 250m for
+              # responsive builds and cold starts.
+              # memory: "256Mi"  # old: throttled GKE disk I/O too much
+              # cpu: "100m"      # old: throttled GKE network/install too much
               memory: "512Mi"
               cpu: "250m"
             limits:
+              # [OPTIMIZED]: Restored to 1Gi memory and 500m CPU.
+              # memory: "512Mi"  # old: throttled
+              # cpu: "250m"      # old: throttled
               memory: "1Gi"
               cpu: "500m"
 

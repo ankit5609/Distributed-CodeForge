@@ -54,7 +54,11 @@ spec:
       serviceAccountName: workspace-service-account
       containers:
         - name: workspace-service
-          image: ankit5609/codeforge-workspace-service
+          # [BUG FIX - 2025-06]: Using exact image digest instead of tag.
+          # GKE Autopilot sometimes uses a cached layer/image for snapshot tags even with
+          # imagePullPolicy: Always if the tag has not explicitly changed (or registry sync lag).
+          # Using the exact digest guarantees that Kubernetes pulls our new code.
+          image: ankit5609/codeforge-workspace-service@sha256:2dfa54bcb1477cc75718a122c8e82b979d0700ec082acb52cc89b22966af3a0b
           imagePullPolicy: Always
           ports:
             - containerPort: 9020

@@ -4,8 +4,15 @@ metadata:
   name: codeforge-main-ingress
   namespace: codeforge-core
   annotations:
+    # proxy-read-timeout / proxy-send-timeout: Keep long timeouts for WebSocket connections
+    # used in the live preview iframe (Vite HMR uses WebSocket). Without these, Nginx
+    # would close idle WebSocket connections after the default 60s.
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # [NEW - 2025-06]: Added proxy-connect-timeout (was missing).
+    # Controls how long Nginx waits for the upstream pod to accept a connection.
+    # Default is 60s which is fine, but making it explicit here for clarity.
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
 spec:
   ingressClassName: "nginx"
   rules:
@@ -13,6 +20,13 @@ spec:
   - host: "codeforge.arclite.site"
     http:
       paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: api-gateway
+            port:
+              number: 80
       - path: /
         pathType: Prefix
         backend:
@@ -24,6 +38,13 @@ spec:
   - host: "www.codeforge.arclite.site"
     http:
       paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: api-gateway
+            port:
+              number: 80
       - path: /
         pathType: Prefix
         backend:

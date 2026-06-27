@@ -38,8 +38,24 @@ async function getTarget(hostname) {
 const getTargetUrl = (target) => {
     return target.includes(':') ? `http://${target}` : `http://${target}:5173`;
 };
+// [NEW] Configure proxy to set CORS headers on all proxied responses
+proxy.on('proxyRes', function (proxyRes, req, res) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
+    res.setHeader('Access-Control-Allow-Headers', '*');
+});
 
 const server = http.createServer(async (req, res) => {
+    // [NEW] Set CORS headers for all non-proxied error responses (like 404, 502) and preflight requests
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
+    res.setHeader('Access-Control-Allow-Headers', '*');
+
+    if (req.method === 'OPTIONS') {
+        res.writeHead(200);
+        return res.end();
+    }
+
     const rawHost = req.headers.host || ''; 
     const hostname = rawHost.split(':')[0];
 
@@ -56,7 +72,7 @@ const server = http.createServer(async (req, res) => {
     proxy.web(req, res, { target }, (e) => {
         console.error(`Proxy Error (Web): ${hostname} -> ${e.message}`);
         if (!res.headersSent) {
-            res.writeHead(502);
+            res.writeHead(502, { 'Content-Type': 'text/plain' });
             res.end('Preview server unavailable or starting...');
         }
     });

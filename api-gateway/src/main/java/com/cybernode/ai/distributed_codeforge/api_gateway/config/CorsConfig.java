@@ -17,7 +17,9 @@ public class CorsConfig {
         CorsConfiguration corsConfig = new CorsConfiguration();
         corsConfig.setAllowedOrigins(Arrays.asList(
                 "http://codeforge.arclite.site",
+                "https://codeforge.arclite.site",
                 "http://www.codeforge.arclite.site",
+                "https://www.codeforge.arclite.site",
                 "http://localhost:5173"
         ));
         corsConfig.setMaxAge(3600L);

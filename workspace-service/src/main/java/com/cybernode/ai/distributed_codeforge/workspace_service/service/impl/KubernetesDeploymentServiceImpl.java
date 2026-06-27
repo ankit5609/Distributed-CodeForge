@@ -12,8 +12,10 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import org.springframework.scheduling.annotation.Scheduled;
 
 @Service
 @RequiredArgsConstructor
@@ -43,8 +45,8 @@ public class KubernetesDeploymentServiceImpl implements DeploymentService {
 
         // Use default port 80 format logic for clean URLs, or explicit ports for local testing
         String formattedUrl = proxyPort.equals("80")
-                ? "http://" + domain
-                : "http://" + domain + ":" + proxyPort;
+                ? "//" + domain
+                : "//" + domain + ":" + proxyPort;
 
         Pod existingPod = findActivePod(projectId);
 
@@ -55,7 +57,7 @@ public class KubernetesDeploymentServiceImpl implements DeploymentService {
             
             try {
                 // Step 1: npm install (blocking - wait for it to fully finish)
-                execCommand(podName, "runner", "sh", "-c", "npm install");
+                execCommand(podName, "runner", "sh", "-c", "npm install --no-audit --no-fund --prefer-offline");
                 // Step 2: Kill existing Vite by port (fuser kills the process holding 5173/tcp)
                 execCommand(podName, "runner", "sh", "-c", "fuser -k 5173/tcp 2>/dev/null || pkill -9 -f vite 2>/dev/null || true; sleep 1");
                 // Step 3: Start fresh Vite in background
@@ -124,7 +126,7 @@ public class KubernetesDeploymentServiceImpl implements DeploymentService {
             execCommand(podName, "syncer", "sh", "-c", watchCmd);
 
             // Step 1: npm install (blocking - wait for it to fully finish before starting Vite)
-            execCommand(podName, "runner", "sh", "-c", "npm install");
+            execCommand(podName, "runner", "sh", "-c", "npm install --no-audit --no-fund --prefer-offline");
             // Step 2: Ensure port 5173 is free (kill by port, not by process name)
             execCommand(podName, "runner", "sh", "-c", "fuser -k 5173/tcp 2>/dev/null || pkill -9 -f vite 2>/dev/null || true; sleep 1");
             // Step 3: Start Vite in background
@@ -146,9 +148,56 @@ public class KubernetesDeploymentServiceImpl implements DeploymentService {
     private void registerRoute(String domain, Pod pod) {
         String podIp = pod.getStatus().getPodIP();
         if (podIp == null) throw new RuntimeException("Pod is running but has no IP!");
-
-        redisTemplate.opsForValue().set("route:" + domain, podIp + ":5173", 6, TimeUnit.HOURS);
+/** 
+        [OPTIMIZED]: Reduced TTL from 6 hours to 30 minutes.
+        Previously 6h was set to keep a preview alive for a long coding session.
+        For a showcase project with 1 runner pod, a stale route means the pod is burning
+        100m CPU + 256Mi RAM indefinitely with no user connected.
+        30 minutes is generous for a demo session; the user can always re-open the project.
+        The cleanupStalePods() scheduler below then recycles the pod within the next hour check.
+        To restore: change 30L, TimeUnit.MINUTES back to 6L, TimeUnit.HOURS
+        redisTemplate.opsForValue().set("route:" + domain, podIp + ":5173", 6, TimeUnit.HOURS);  // old: 6h TTL */
+        redisTemplate.opsForValue().set("route:" + domain, podIp + ":5173", 30, TimeUnit.MINUTES);
         log.info("Route Registered: {} -> {}", domain, podIp);
+    }
+
+    /**
+     * [NEW] Auto-release stale pods.
+     *
+     * Runs every 30 minutes. Finds all busy pods whose Redis route has expired
+     * (meaning no user has been actively using the preview for at least 30 minutes).
+     * Releases those pods back to idle so the runner pool is freed up.
+     *
+     * Without this, a pod claimed at 9am would keep Vite running and hold 256Mi RAM
+     * until another project explicitly evicts it — which may never happen in a showcase.
+     *
+     * To disable: remove @Scheduled and @EnableScheduling from WorkspaceServiceApplication.
+     */
+    @Scheduled(fixedRate = 30, timeUnit = TimeUnit.MINUTES)
+    public void cleanupStalePods() {
+        log.info("[Scheduler] Running stale pod cleanup...");
+        List<Pod> busyPods = client.pods().inNamespace(namespace)
+                .withLabel(POOL_LABEL, BUSY)
+                .list().getItems();
+
+        for (Pod pod : busyPods) {
+            String projectIdStr = pod.getMetadata().getLabels().get(PROJECT_LABEL);
+            if (projectIdStr == null) continue;
+
+            String domain = "project-" + projectIdStr + "." + baseDomain;
+            Boolean routeExists = redisTemplate.hasKey("route:" + domain);
+
+            if (Boolean.FALSE.equals(routeExists)) {
+                log.info("[Scheduler] Route expired for project {}. Releasing pod {}.",
+                        projectIdStr, pod.getMetadata().getName());
+                try {
+                    release(Long.parseLong(projectIdStr));
+                } catch (Exception e) {
+                    log.error("[Scheduler] Failed to release pod for project {}: {}", projectIdStr, e.getMessage());
+                }
+            }
+        }
+        log.info("[Scheduler] Stale pod cleanup complete.");
     }
 
     private void execCommand(String podName, String container, String... command) {
@@ -170,7 +219,10 @@ public class KubernetesDeploymentServiceImpl implements DeploymentService {
             if (command[command.length - 1].trim().endsWith("&")) {
                 Thread.sleep(500);
             } else {
-                data.get(30, TimeUnit.SECONDS);
+                // [OPTIMIZED - 2025-06]: Increased timeout to 5 minutes.
+                // This is a maximum deadline, not a sleep. If the command (like 'npm install')
+                // completes in 40 seconds, it returns immediately. This prevents GKE cold-start timeouts.
+                data.get(5, TimeUnit.MINUTES);
             }
 
         } catch (Exception e) {
