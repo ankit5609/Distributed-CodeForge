@@ -9,8 +9,7 @@ spec:
   # For this showcase project (single user at a time), 1 is sufficient.
   # The workspace-service already recycles the pod when needed, so the pool never runs dry.
   # To restore production behavior: change back to: replicas: 2
-  # replicas: 2  # old: production default — 2 warm runners for concurrent users
-  replicas: 1
+  replicas: 2
 
   selector:
     matchLabels:

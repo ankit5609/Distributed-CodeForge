@@ -42,11 +42,14 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
     @Override
     public SubscriptionResponse getCurrentSubscription() {
-        Long userId=authUtil.getCurrentUserId();
-        var currentSubscription= subscriptionRepository.findByUserIdAndStatusIn(userId, Set.of(
+        Long userId = authUtil.getCurrentUserId();
+        var subscriptions = subscriptionRepository.findByUserIdAndStatusIn(userId, Set.of(
                 SubscriptionStatus.ACTIVE, SubscriptionStatus.PAST_DUE,
                 SubscriptionStatus.TRIALING, SubscriptionStatus.DEMO_LOCKED
-        )).orElse(null);
+        ));
+        var currentSubscription = subscriptions.isEmpty() ? null : subscriptions.stream()
+                .max((s1, s2) -> s1.getId().compareTo(s2.getId()))
+                .get();
         if (currentSubscription == null) {
             return new SubscriptionResponse(null, "NONE", null, null, null);
         }
