@@ -35,7 +35,7 @@ public class CodeGenerationTools {
             description = "Triggers kubernetes deployment for this project and polls runtime logs. Call this after editing files to verify the build compiles cleanly before returning.")
     public String deployAndVerifyPreview() {
         try {
-            workspaceClient.deployProject(projectId);
+            workspaceClient.deployProject(projectId, true);
         } catch (Exception e) {
             return "FAILED: Failed to trigger deployment: " + e.getMessage();
         }

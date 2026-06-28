@@ -41,7 +41,8 @@ public class KubernetesDeploymentServiceImpl implements DeploymentService {
     private static final String IDLE = "idle";
     private static final String BUSY = "busy";
 
-    public DeployResponse deploy(Long projectId) {
+    @Override
+    public DeployResponse deploy(Long projectId, boolean force) {
         // Dynamically build the domain: project-123.app.domain.com
         String domain = "project-" + projectId + "." + baseDomain;
 
@@ -58,6 +59,16 @@ public class KubernetesDeploymentServiceImpl implements DeploymentService {
             if (!"Running".equals(phase)) {
                 log.info("Found existing pod {} for project {} in phase {}. Waiting for boot...", podName, projectId, phase);
                 return new DeployResponse(formattedUrl);
+            }
+
+            // Bypasses reinstall/restart if the preview server is already active and force is false (e.g. silent pre-warm load)
+            if (!force) {
+                boolean isViteRunning = isProcessRunning(podName, "vite");
+                if (isViteRunning) {
+                    log.info("Vite dev server is already running on pod {} for project {}. Bypassing dev server restart.", podName, projectId);
+                    registerRoute(domain, existingPod);
+                    return new DeployResponse(formattedUrl);
+                }
             }
 
             log.info("Found existing pod {} for project {}. Resuming and updating server...", podName, projectId);
@@ -270,7 +281,7 @@ public class KubernetesDeploymentServiceImpl implements DeploymentService {
         if (pod == null) {
             log.info("No claimed pod found for project {} during log request. Triggering automatic deployment...", projectId);
             try {
-                deploy(projectId);
+                deploy(projectId, false);
                 return new DeploymentLogsResponse(projectId, "STARTING", "No active pod was found. Automatically started a new deployment runner. Please poll again.");
             } catch (Exception e) {
                 return new DeploymentLogsResponse(projectId, "UNREACHABLE", "No active pod found and auto-deploy failed: " + e.getMessage());

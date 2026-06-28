@@ -5,7 +5,7 @@ import com.cybernode.ai.distributed_codeforge.workspace_service.dto.project.Depl
 import com.cybernode.ai.distributed_codeforge.workspace_service.dto.project.DeploymentLogsResponse;
 
 public interface DeploymentService {
-    DeployResponse deploy(Long projectId);
+    DeployResponse deploy(Long projectId, boolean force);
     void release(Long projectId);
     DeploymentLogsResponse getDeploymentLogs(Long projectId);
 }

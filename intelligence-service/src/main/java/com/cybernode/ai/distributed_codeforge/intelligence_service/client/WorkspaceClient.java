@@ -25,7 +25,7 @@ public interface WorkspaceClient {
             @RequestParam("permission") ProjectPermission permission);
 
     @PostMapping("/projects/{projectId}/deploy")
-    Object deployProject(@PathVariable("projectId") Long projectId);
+    Object deployProject(@PathVariable("projectId") Long projectId, @RequestParam("force") boolean force);
 
     @GetMapping("/projects/{projectId}/logs")
     DeploymentLogsResponse getDeploymentLogs(@PathVariable("projectId") Long projectId);

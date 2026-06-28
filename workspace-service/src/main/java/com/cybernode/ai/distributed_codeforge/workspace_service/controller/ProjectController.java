@@ -51,8 +51,10 @@ public class ProjectController {
     }
 
     @PostMapping("/{id}/deploy")
-    public ResponseEntity<DeployResponse> deployProject(@PathVariable Long id) {
-        return ResponseEntity.ok(deploymentService.deploy(id));
+    public ResponseEntity<DeployResponse> deployProject(
+            @PathVariable Long id,
+            @RequestParam(value = "force", defaultValue = "false") boolean force) {
+        return ResponseEntity.ok(deploymentService.deploy(id, force));
     }
 
     @GetMapping("/{id}/logs")
