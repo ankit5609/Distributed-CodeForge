@@ -227,8 +227,21 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         return planRepository.findById(planId).orElseThrow(()-> new ResourceNotFoundException("Plan",planId.toString()));
     }
     private Subscription getSubscription(String gatewaySubscriptionId) {
-        return subscriptionRepository.findByStripeSubscriptionId(gatewaySubscriptionId)
-                .orElseThrow(() -> new ResourceNotFoundException("Subscription", gatewaySubscriptionId));
+        Optional<Subscription> optional = Optional.empty();
+        for (int i = 0; i < 5; i++) {
+            optional = subscriptionRepository.findByStripeSubscriptionId(gatewaySubscriptionId);
+            if (optional.isPresent()) {
+                break;
+            }
+            try {
+                log.info("Subscription {} not found in DB yet (helper). Retry attempt {}/5 in 500ms...", gatewaySubscriptionId, i + 1);
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Retry wait interrupted", e);
+            }
+        }
+        return optional.orElseThrow(() -> new ResourceNotFoundException("Subscription", gatewaySubscriptionId));
     }
 
 }
