@@ -59,4 +59,12 @@ public class UsageServiceImpl implements UsageService {
                 .build();
         return usageLogRepository.save(newLog);
     }
+
+    @Override
+    public int getTokensUsedToday(Long userId) {
+        LocalDate today = LocalDate.now();
+        return usageLogRepository.findByUserIdAndDate(userId, today)
+                .map(UsageLog::getTokensUsed)
+                .orElse(0);
+    }
 }

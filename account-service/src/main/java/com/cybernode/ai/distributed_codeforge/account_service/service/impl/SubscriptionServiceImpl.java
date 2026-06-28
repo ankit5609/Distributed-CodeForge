@@ -10,6 +10,7 @@ import com.cybernode.ai.distributed_codeforge.account_service.repository.PlanRep
 import com.cybernode.ai.distributed_codeforge.account_service.repository.SubscriptionRepository;
 import com.cybernode.ai.distributed_codeforge.account_service.repository.UserRepository;
 import com.cybernode.ai.distributed_codeforge.account_service.service.SubscriptionService;
+import com.cybernode.ai.distributed_codeforge.account_service.client.IntelligenceClient;
 import com.cybernode.ai.distributed_codeforge.common_lib.dto.PlanDto;
 import com.cybernode.ai.distributed_codeforge.common_lib.enums.SubscriptionStatus;
 import com.cybernode.ai.distributed_codeforge.common_lib.error.ResourceNotFoundException;
@@ -34,10 +35,12 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     private final PlanSubscriptionMapper planSubscriptionMapper;
     private final UserRepository userRepository;
     private final PlanRepository planRepository;
+    private final IntelligenceClient intelligenceClient;
 
     @Value("${app.billing.mode:LOCAL}")
     private String billingMode;
 
+    
     private final Integer FREE_TIER_PROJECTS_ALLOWED=0;
 
     @Override
@@ -56,6 +59,24 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
         SubscriptionResponse response = planSubscriptionMapper.toSubscriptionResponse(currentSubscription);
         
+        Long tokensUsed = 0L;
+        try {
+            Integer used = intelligenceClient.getTokensUsedToday(userId);
+            if (used != null) {
+                tokensUsed = used.longValue();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to fetch token usage from intelligence-service for user {}: {}", userId, e.getMessage());
+        }
+
+        response = new SubscriptionResponse(
+                response.plan(),
+                response.status(),
+                response.currentPeriodEnd(),
+                tokensUsed,
+                response.message()
+        );
+
         // If the subscription is DEMO_LOCKED, return a custom warning message for the UI
         if (currentSubscription.getStatus() == SubscriptionStatus.DEMO_LOCKED) {
             String warningMsg = "Your payment was successfully processed using Stripe Test Mode. " +

@@ -6,6 +6,7 @@ import com.cybernode.ai.distributed_codeforge.intelligence_service.dto.chat.Chat
 import com.cybernode.ai.distributed_codeforge.intelligence_service.dto.chat.StreamResponse;
 import com.cybernode.ai.distributed_codeforge.intelligence_service.service.AiGenerationService;
 import com.cybernode.ai.distributed_codeforge.intelligence_service.service.ChatService;
+import com.cybernode.ai.distributed_codeforge.intelligence_service.service.UsageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +23,7 @@ public class ChatController {
 
     private final AiGenerationService aiGenerationService;
     private final ChatService chatService;
+    private final UsageService usageService;
 
     @PostMapping(value = "/stream",produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<StreamResponse>> streamChat(
@@ -39,5 +41,10 @@ public class ChatController {
             @PathVariable Long projectId) {
 
         return ResponseEntity.ok(chatService.getProjectChatHistory(projectId));
+    }
+
+    @GetMapping("/internal/v1/usage/today")
+    public ResponseEntity<Integer> getTokensUsedToday(@RequestParam("userId") Long userId) {
+        return ResponseEntity.ok(usageService.getTokensUsedToday(userId));
     }
 }
