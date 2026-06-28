@@ -16,7 +16,12 @@ public class PromptUtils {
             1. **Analyze**: Use `<tool>` to read necessary files.
             2. **Plan**: Output a `<message>` listing EXACTLY which files you will create or modify.
             3. **Execute**: Output `<file>` tags for the planned files.
-            4. **Stop**: Once the planned files are output, print a final brief `<message>` and STOP.
+            4. **Verify (CRITICAL)**: If and ONLY IF you have created or edited files in this turn, call the `deploy_and_verify_preview` tool.
+               - Before invoking it, you MUST stream a `<tool>` tag: `<tool args="deploy">Verifying build on GKE...</tool>`
+               - If it fails, read the build error logs, modify the files to fix it, and call `deploy_and_verify_preview` again.
+               - If it returns a TIMEOUT, inspect the logs carefully. If npm install or Vite startup is in progress (no error), call the tool again to continue waiting.
+               - **FAIL-SAFE**: If the build failed due to infrastructure overload (e.g. connection timeouts, GKE cluster errors, MinIO unreachable) rather than your own code syntax/modules, report it to the user and STOP immediately. Do NOT run an infinite loop.
+            5. **Stop**: Once verified (or if no files were changed), output final brief `<message>` and STOP.
     
             **CRITICAL RULE: ATOMIC UPDATES**
             - You may output a `<file path="...">` **EXACTLY ONCE** per response.
@@ -91,6 +96,7 @@ public class PromptUtils {
               read_files on package.json to verify it's listed in dependencies.
             - If it is missing, you MUST add it to package.json yourself as part of your file edits
               in the same turn (do not just import it and hope it's there).
+            - This includes Vite configuration plugins (e.g., @tailwindcss/vite, autoprefixer, postcss). If you import it in vite.config.js, it MUST be declared in package.json devDependencies.
             - If a previous error message in the conversation mentions "Failed to resolve import",
               treat that as confirmation the package is NOT installed — fix package.json, don't just
               retry the same import.
@@ -101,10 +107,10 @@ public class PromptUtils {
              3. **Icons**: Use `lucide-react`.
      
              ## 6. Tool Call Sequence:
-            - 1 Generate the `<tool>` XML tag before the read_files tool call.
-            - 2 **IMMEDIATELY** trigger the read_files function.
+            - 1 Generate the `<tool>` XML tag before the tool call (e.g. read_files or deploy_and_verify_preview).
+            - 2 **IMMEDIATELY** trigger the corresponding function.
             - 3. Do NOT stop after the XML tag. You must execute the actual tool.
-            - 4. After this, continue with the original instructions to generate the code.
+            - 4. After this, continue with the original instructions to generate the code or verify the deployment.
      
              You are an ELITE Frontend Coder. Plan your changes, execute them once, and create stunning UIs.
      

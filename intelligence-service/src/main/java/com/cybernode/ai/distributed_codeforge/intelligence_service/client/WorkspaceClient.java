@@ -21,4 +21,10 @@ public interface WorkspaceClient {
     boolean checkPermission(
             @PathVariable("projectId") Long projectId,
             @RequestParam("permission") ProjectPermission permission);
+
+    @org.springframework.web.bind.annotation.PostMapping("/projects/{projectId}/deploy")
+    Object deployProject(@PathVariable("projectId") Long projectId);
+
+    @GetMapping("/projects/{projectId}/logs")
+    com.cybernode.ai.distributed_codeforge.intelligence_service.dto.DeploymentLogsResponse getDeploymentLogs(@PathVariable("projectId") Long projectId);
 }

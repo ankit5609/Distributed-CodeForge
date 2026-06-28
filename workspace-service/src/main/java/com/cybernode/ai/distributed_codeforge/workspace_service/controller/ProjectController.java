@@ -58,4 +58,9 @@ public class ProjectController {
         return ResponseEntity.ok(deploymentService.deploy(id));
     }
 
+    @GetMapping("/{id}/logs")
+    public ResponseEntity<com.cybernode.ai.distributed_codeforge.workspace_service.dto.project.DeploymentLogsResponse> getProjectLogs(@PathVariable Long id) {
+        return ResponseEntity.ok(deploymentService.getDeploymentLogs(id));
+    }
+
 }

@@ -1,5 +1,6 @@
 package com.cybernode.ai.distributed_codeforge.workspace_service.service.impl;
 import com.cybernode.ai.distributed_codeforge.workspace_service.dto.project.DeployResponse;
+import com.cybernode.ai.distributed_codeforge.workspace_service.dto.project.DeploymentLogsResponse;
 import com.cybernode.ai.distributed_codeforge.workspace_service.service.DeploymentService;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -45,8 +46,8 @@ public class KubernetesDeploymentServiceImpl implements DeploymentService {
 
         // Use default port 80 format logic for clean URLs, or explicit ports for local testing
         String formattedUrl = proxyPort.equals("80")
-                ? "//" + domain
-                : "//" + domain + ":" + proxyPort;
+                ? "http://" + domain
+                : "http://" + domain + ":" + proxyPort;
 
         Pod existingPod = findActivePod(projectId);
 
@@ -252,6 +253,52 @@ public class KubernetesDeploymentServiceImpl implements DeploymentService {
         log.info("Released pod {} back to idle pool", podName);
     }
 
+    @Override
+    public DeploymentLogsResponse getDeploymentLogs(Long projectId) {
+        Pod pod = findActivePod(projectId);
+        if (pod == null) {
+            return new DeploymentLogsResponse(projectId, "UNREACHABLE", "No active preview pod found for this project.");
+        }
 
+        String podName = pod.getMetadata().getName();
+        String logs = execCommandWithOutput(podName, "runner", "cat", "/app/dev.log");
+        
+        String status = "CRASHED";
+        if (logs.contains("ready in") || logs.contains("Local:") || logs.contains("Network:")) {
+            status = "RUNNING";
+        } else if (logs.contains("ERR_MODULE_NOT_FOUND") || logs.contains("error when starting dev server") || logs.contains("Error: The following dependencies are imported but could not be resolved")) {
+            status = "CRASHED";
+        } else if (logs.isEmpty()) {
+            status = "UNREACHABLE";
+        }
+        
+        return new DeploymentLogsResponse(projectId, status, logs);
+    }
 
+    private String execCommandWithOutput(String podName, String container, String... command) {
+        log.debug("Exec with output in {}:{} -> {}", podName, container, String.join(" ", command));
+
+        CompletableFuture<String> data = new CompletableFuture<>();
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ByteArrayOutputStream err = new ByteArrayOutputStream();
+        try (ExecWatch ignored = client.pods().inNamespace(namespace).withName(podName)
+                .inContainer(container)
+                .writingOutput(out)
+                .writingError(err)
+                .usingListener(new ExecListener() {
+                    @Override
+                    public void onClose(int code, String reason) {
+                        data.complete("Done");
+                    }
+                })
+                .exec(command)) {
+
+            data.get(10, TimeUnit.SECONDS);
+            return out.toString();
+
+        } catch (Exception e) {
+            log.error("Exec with output failed", e);
+            return "Failed to fetch logs: " + e.getMessage() + "\nStderr: " + err.toString();
+        }
+    }
 }

@@ -30,4 +30,42 @@ public class CodeGenerationTools {
         }
         return result;
     }
+
+    @Tool(name = "deploy_and_verify_preview",
+            description = "Triggers GKE deployment for this project and polls runtime logs. Call this after editing files to verify the build compiles cleanly before returning.")
+    public String deployAndVerifyPreview() {
+        try {
+            workspaceClient.deployProject(projectId);
+        } catch (Exception e) {
+            return "FAILED: Failed to trigger deployment: " + e.getMessage();
+        }
+
+        for (int i = 0; i < 15; i++) {
+            try {
+                var response = workspaceClient.getDeploymentLogs(projectId);
+                if (response != null) {
+                    if ("RUNNING".equals(response.getStatus())) {
+                        return "SUCCESS: Vite development server is ready on http://project-" + projectId + ".previews.codeforge.arclite.site";
+                    }
+                    if ("CRASHED".equals(response.getStatus()) && response.getLogs() != null && (response.getLogs().contains("error") || response.getLogs().contains("Failed to load config") || response.getLogs().contains("ERR_MODULE_NOT_FOUND"))) {
+                        return "FAILED: Compilation or start error:\n" + response.getLogs();
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException ignored) {
+            }
+        }
+
+        try {
+            var finalResponse = workspaceClient.getDeploymentLogs(projectId);
+            if (finalResponse != null) {
+                return "TIMEOUT: Vite server is taking too long to start. Current logs:\n" + finalResponse.getLogs();
+            }
+        } catch (Exception ignored) {
+        }
+        return "TIMEOUT: Vite server is taking too long to start.";
+    }
 }
