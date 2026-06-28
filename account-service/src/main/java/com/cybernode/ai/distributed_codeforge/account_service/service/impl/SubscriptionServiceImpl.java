@@ -40,7 +40,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     @Value("${app.billing.mode:LOCAL}")
     private String billingMode;
 
-    
+
     private final Integer FREE_TIER_PROJECTS_ALLOWED=0;
 
     @Override
