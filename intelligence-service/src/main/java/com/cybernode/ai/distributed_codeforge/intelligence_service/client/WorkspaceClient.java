@@ -3,9 +3,11 @@ package com.cybernode.ai.distributed_codeforge.intelligence_service.client;
 
 import com.cybernode.ai.distributed_codeforge.common_lib.dto.FileTreeDto;
 import com.cybernode.ai.distributed_codeforge.common_lib.enums.ProjectPermission;
+import com.cybernode.ai.distributed_codeforge.intelligence_service.dto.DeploymentLogsResponse;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 @FeignClient(name = "workspace-service", path = "/workspace",url="${WORKSPACE_SERVICE_URI:}")
@@ -22,9 +24,9 @@ public interface WorkspaceClient {
             @PathVariable("projectId") Long projectId,
             @RequestParam("permission") ProjectPermission permission);
 
-    @org.springframework.web.bind.annotation.PostMapping("/projects/{projectId}/deploy")
+    @PostMapping("/projects/{projectId}/deploy")
     Object deployProject(@PathVariable("projectId") Long projectId);
 
     @GetMapping("/projects/{projectId}/logs")
-    com.cybernode.ai.distributed_codeforge.intelligence_service.dto.DeploymentLogsResponse getDeploymentLogs(@PathVariable("projectId") Long projectId);
+    DeploymentLogsResponse getDeploymentLogs(@PathVariable("projectId") Long projectId);
 }

@@ -1,4 +1,5 @@
 package com.cybernode.ai.distributed_codeforge.workspace_service.service.impl;
+
 import com.cybernode.ai.distributed_codeforge.workspace_service.dto.project.DeployResponse;
 import com.cybernode.ai.distributed_codeforge.workspace_service.dto.project.DeploymentLogsResponse;
 import com.cybernode.ai.distributed_codeforge.workspace_service.service.DeploymentService;
@@ -10,13 +11,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import org.springframework.scheduling.annotation.Scheduled;
 
 @Service
 @RequiredArgsConstructor
@@ -49,10 +50,16 @@ public class KubernetesDeploymentServiceImpl implements DeploymentService {
                 ? "http://" + domain
                 : "http://" + domain + ":" + proxyPort;
 
-        Pod existingPod = findActivePod(projectId);
+        Pod existingPod = findClaimedPod(projectId);
 
         if (existingPod != null) {
             String podName = existingPod.getMetadata().getName();
+            String phase = existingPod.getStatus().getPhase();
+            if (!"Running".equals(phase)) {
+                log.info("Found existing pod {} for project {} in phase {}. Waiting for boot...", podName, projectId, phase);
+                return new DeployResponse(formattedUrl);
+            }
+
             log.info("Found existing pod {} for project {}. Resuming and updating server...", podName, projectId);
             registerRoute(domain, existingPod);
             
@@ -75,15 +82,16 @@ public class KubernetesDeploymentServiceImpl implements DeploymentService {
         return claimAndStartNewPod(projectId, domain, formattedUrl);
     }
 
-    private Pod findActivePod(Long projectId) {
+    private Pod findClaimedPod(Long projectId) {
         return client.pods().inNamespace(namespace)
                 .withLabel(PROJECT_LABEL, projectId.toString())
                 .withLabel(POOL_LABEL, BUSY)
                 .list().getItems().stream()
-                .filter(pod -> pod.getStatus().getPhase().equals("Running"))
                 .findFirst()
                 .orElse(null);
     }
+
+
 
     private DeployResponse claimAndStartNewPod(Long projectId, String domain, String formattedUrl) {
         Pod pod = client.pods().inNamespace(namespace)
@@ -220,7 +228,7 @@ public class KubernetesDeploymentServiceImpl implements DeploymentService {
             if (command[command.length - 1].trim().endsWith("&")) {
                 Thread.sleep(500);
             } else {
-                // [OPTIMIZED - 2025-06]: Increased timeout to 5 minutes.
+                // [OPTIMIZED]: Increased timeout to 5 minutes.
                 // This is a maximum deadline, not a sleep. If the command (like 'npm install')
                 // completes in 40 seconds, it returns immediately. This prevents GKE cold-start timeouts.
                 data.get(5, TimeUnit.MINUTES);
@@ -237,12 +245,15 @@ public class KubernetesDeploymentServiceImpl implements DeploymentService {
 
     @Override
     public void release(Long projectId) {
-        Pod pod = findActivePod(projectId);
+        Pod pod = findClaimedPod(projectId);
         if (pod == null) return;
 
         String podName = pod.getMetadata().getName();
-        killExistingWatchers(podName);
-        execCommand(podName, "runner", "sh", "-c", "fuser -k 5173/tcp 2>/dev/null || pkill -9 -f vite 2>/dev/null || true; for f in /app/* /app/.[!.]*; do [ -e \"$f\" ] && [ \"$f\" != \"/app/node_modules\" ] && rm -rf \"$f\"; done");
+        String phase = pod.getStatus().getPhase();
+        if ("Running".equals(phase)) {
+            killExistingWatchers(podName);
+            execCommand(podName, "runner", "sh", "-c", "fuser -k 5173/tcp 2>/dev/null || pkill -9 -f vite 2>/dev/null || true; for f in /app/* /app/.[!.]*; do [ -e \"$f\" ] && [ \"$f\" != \"/app/node_modules\" ] && rm -rf \"$f\"; done");
+        }
 
         client.pods().inNamespace(namespace).withName(podName).edit(p -> {
             p.getMetadata().getLabels().put(POOL_LABEL, IDLE);
@@ -255,24 +266,43 @@ public class KubernetesDeploymentServiceImpl implements DeploymentService {
 
     @Override
     public DeploymentLogsResponse getDeploymentLogs(Long projectId) {
-        Pod pod = findActivePod(projectId);
+        Pod pod = findClaimedPod(projectId);
         if (pod == null) {
-            return new DeploymentLogsResponse(projectId, "UNREACHABLE", "No active preview pod found for this project.");
+            log.info("No claimed pod found for project {} during log request. Triggering automatic deployment...", projectId);
+            try {
+                deploy(projectId);
+                return new DeploymentLogsResponse(projectId, "STARTING", "No active pod was found. Automatically started a new deployment runner. Please poll again.");
+            } catch (Exception e) {
+                return new DeploymentLogsResponse(projectId, "UNREACHABLE", "No active pod found and auto-deploy failed: " + e.getMessage());
+            }
+        }
+
+        String phase = pod.getStatus().getPhase();
+        if (!"Running".equals(phase)) {
+            return new DeploymentLogsResponse(projectId, "STARTING", "Pod is currently booting up (Status: " + phase + "). Please wait...");
         }
 
         String podName = pod.getMetadata().getName();
         String logs = execCommandWithOutput(podName, "runner", "cat", "/app/dev.log");
         
-        String status = "CRASHED";
+        boolean isViteRunning = isProcessRunning(podName, "vite");
+        boolean isNpmInstallRunning = isProcessRunning(podName, "npm install");
+        
+        String status = "STARTING";
         if (logs.contains("ready in") || logs.contains("Local:") || logs.contains("Network:")) {
             status = "RUNNING";
-        } else if (logs.contains("ERR_MODULE_NOT_FOUND") || logs.contains("error when starting dev server") || logs.contains("Error: The following dependencies are imported but could not be resolved")) {
+        } else if (isViteRunning || isNpmInstallRunning) {
+            status = "STARTING";
+        } else {
             status = "CRASHED";
-        } else if (logs.isEmpty()) {
-            status = "UNREACHABLE";
         }
         
         return new DeploymentLogsResponse(projectId, status, logs);
+    }
+
+    private boolean isProcessRunning(String podName, String processName) {
+        String output = execCommandWithOutput(podName, "runner", "sh", "-c", "ps aux");
+        return output != null && output.contains(processName);
     }
 
     private String execCommandWithOutput(String podName, String container, String... command) {

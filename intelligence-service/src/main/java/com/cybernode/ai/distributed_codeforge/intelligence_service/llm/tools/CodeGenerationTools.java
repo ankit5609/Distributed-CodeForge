@@ -32,7 +32,7 @@ public class CodeGenerationTools {
     }
 
     @Tool(name = "deploy_and_verify_preview",
-            description = "Triggers GKE deployment for this project and polls runtime logs. Call this after editing files to verify the build compiles cleanly before returning.")
+            description = "Triggers kubernetes deployment for this project and polls runtime logs. Call this after editing files to verify the build compiles cleanly before returning.")
     public String deployAndVerifyPreview() {
         try {
             workspaceClient.deployProject(projectId);
@@ -47,7 +47,7 @@ public class CodeGenerationTools {
                     if ("RUNNING".equals(response.getStatus())) {
                         return "SUCCESS: Vite development server is ready on http://project-" + projectId + ".previews.codeforge.arclite.site";
                     }
-                    if ("CRASHED".equals(response.getStatus()) && response.getLogs() != null && (response.getLogs().contains("error") || response.getLogs().contains("Failed to load config") || response.getLogs().contains("ERR_MODULE_NOT_FOUND"))) {
+                    if ("CRASHED".equals(response.getStatus())) {
                         return "FAILED: Compilation or start error:\n" + response.getLogs();
                     }
                 }

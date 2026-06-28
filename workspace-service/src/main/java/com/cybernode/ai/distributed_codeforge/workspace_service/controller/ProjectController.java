@@ -1,10 +1,7 @@
 package com.cybernode.ai.distributed_codeforge.workspace_service.controller;
 
 
-import com.cybernode.ai.distributed_codeforge.workspace_service.dto.project.DeployResponse;
-import com.cybernode.ai.distributed_codeforge.workspace_service.dto.project.ProjectRequest;
-import com.cybernode.ai.distributed_codeforge.workspace_service.dto.project.ProjectResponse;
-import com.cybernode.ai.distributed_codeforge.workspace_service.dto.project.ProjectSummaryResponse;
+import com.cybernode.ai.distributed_codeforge.workspace_service.dto.project.*;
 import com.cybernode.ai.distributed_codeforge.workspace_service.service.DeploymentService;
 import com.cybernode.ai.distributed_codeforge.workspace_service.service.ProjectService;
 import jakarta.validation.Valid;
@@ -59,7 +56,7 @@ public class ProjectController {
     }
 
     @GetMapping("/{id}/logs")
-    public ResponseEntity<com.cybernode.ai.distributed_codeforge.workspace_service.dto.project.DeploymentLogsResponse> getProjectLogs(@PathVariable Long id) {
+    public ResponseEntity<DeploymentLogsResponse> getProjectLogs(@PathVariable Long id) {
         return ResponseEntity.ok(deploymentService.getDeploymentLogs(id));
     }
 
