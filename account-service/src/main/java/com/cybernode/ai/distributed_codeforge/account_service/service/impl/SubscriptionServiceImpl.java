@@ -139,9 +139,23 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     @Override
     public void renewSubscriptionPeriod(String gatewaySubscriptionId, Instant periodStart, Instant periodEnd) {
 
-        Optional<Subscription> optional = subscriptionRepository.findByStripeSubscriptionId(gatewaySubscriptionId);
+        Optional<Subscription> optional = Optional.empty();
+        for (int i = 0; i < 5; i++) {
+            optional = subscriptionRepository.findByStripeSubscriptionId(gatewaySubscriptionId);
+            if (optional.isPresent()) {
+                break;
+            }
+            try {
+                log.info("Subscription {} not found in DB yet. Retry attempt {}/5 in 500ms...", gatewaySubscriptionId, i + 1);
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Retry wait interrupted", e);
+            }
+        }
+
         if (optional.isEmpty()) {
-            log.warn("Subscription {} not found in renewSubscriptionPeriod, skipping — checkout.session.completed will handle it", gatewaySubscriptionId);
+            log.warn("Subscription {} not found in renewSubscriptionPeriod after retries, skipping.", gatewaySubscriptionId);
             return;
         }
         Subscription subscription = optional.get();
