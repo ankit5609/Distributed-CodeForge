@@ -12,6 +12,9 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.MessageType;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.document.Document;
+import org.springframework.ai.vectorstore.SearchRequest;
+import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
@@ -25,6 +28,8 @@ import java.util.Map;
 public class FileTreeContextAdvisor implements StreamAdvisor {
 
     private final WorkspaceClient workspaceClient;
+    private final VectorStore vectorStore;
+
 
 
     @Override
@@ -35,32 +40,60 @@ public class FileTreeContextAdvisor implements StreamAdvisor {
         return streamAdvisorChain.nextStream(augmentedChatClientRequest);
     }
 
-    private ChatClientRequest augmentRequestWithFileTree(ChatClientRequest request,Long projectId){
-
-        List<Message> incomingMessages=request.prompt().getInstructions();
-        Message systemMessage=incomingMessages.stream()
-                .filter(m->m.getMessageType()== MessageType.SYSTEM)
+    private ChatClientRequest augmentRequestWithFileTree(ChatClientRequest request, Long projectId) {
+        List<Message> incomingMessages = request.prompt().getInstructions();
+        Message systemMessage = incomingMessages.stream()
+                .filter(m -> m.getMessageType() == MessageType.SYSTEM)
                 .findFirst()
                 .orElse(null);
 
-        List<Message> userMessages=incomingMessages.stream()
-                .filter(m-> m.getMessageType()!=MessageType.SYSTEM)
+        List<Message> userMessages = incomingMessages.stream()
+                .filter(m -> m.getMessageType() != MessageType.SYSTEM)
                 .toList();
 
-        List<Message> allMessages=new ArrayList<>();
+        List<Message> allMessages = new ArrayList<>();
 
-        //add original system message
-        if(systemMessage!=null){
+        // Add original system message
+        if (systemMessage != null) {
             allMessages.add(systemMessage);
         }
 
-        List<FileNode> fileTree=workspaceClient.getFileTree(projectId).files();
-        String fileTreeContext="\n\n ---- FILE_TREE ----\n\n"+ fileTree.toString();
-
+        // Add file tree (just paths, lightweight)
+        List<FileNode> fileTree = workspaceClient.getFileTree(projectId).files();
+        String fileTreeContext = "\n\n ---- FILE_TREE ----\n\n" + fileTree.toString();
         allMessages.add(new SystemMessage(fileTreeContext));
+
+        // Retrieve relevant file contents dynamically via pgvector similarity search
+        String userQuestion = userMessages.isEmpty() ? "" : userMessages.get(userMessages.size() - 1).getText();
+        if (userQuestion != null && !userQuestion.trim().isEmpty()) {
+            try {
+                List<Document> relevantDocuments = vectorStore.similaritySearch(
+                        SearchRequest.builder()
+                                .query(userQuestion)
+                                .filterExpression("projectId == " + projectId)
+                                .topK(5)
+                                .build()
+                );
+
+                if (relevantDocuments != null && !relevantDocuments.isEmpty()) {
+                    StringBuilder contextBuilder = new StringBuilder("\n\n ---- RELEVANT_CODE_CONTEXT ----\n");
+                    for (Document doc : relevantDocuments) {
+                        String path = doc.getMetadata().getOrDefault("path", "unknown").toString();
+                        contextBuilder.append("\n--- START OF FILE: ").append(path).append(" ---\n")
+                                      .append(doc.getText())
+                                      .append("\n--- END OF FILE ---\n");
+                    }
+                    allMessages.add(new SystemMessage(contextBuilder.toString()));
+                }
+            } catch (Exception e) {
+                log.error("Failed to perform similarity search for project: {}", projectId, e);
+            }
+        }
+
+
         allMessages.addAll(userMessages);
 
-        return request.mutate().prompt(new Prompt(allMessages,request.prompt().getOptions())).build();
+        return request.mutate().prompt(new Prompt(allMessages, request.prompt().getOptions())).build();
     }
 
     @Override

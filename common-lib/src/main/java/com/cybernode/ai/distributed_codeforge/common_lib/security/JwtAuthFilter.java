@@ -32,8 +32,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         final String requestHeaderToken = request.getHeader("Authorization");
         if (requestHeaderToken != null && requestHeaderToken.startsWith("Bearer ")) {
             try {
-                // Wrap only JWT processing in try-catch block so that token errors can be resolved.
-                // Exceptions thrown downstream by controllers/services are allowed to propagate normally.
                 String jwtToken = requestHeaderToken.split(("Bearer "))[1];
                 JwtUserPrincipal user = authUtil.verifyAccessToken(jwtToken);
                 if (user != null && SecurityContextHolder.getContext().getAuthentication() == null) {

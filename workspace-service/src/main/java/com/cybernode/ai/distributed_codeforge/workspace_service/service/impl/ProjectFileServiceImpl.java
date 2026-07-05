@@ -8,6 +8,7 @@ import com.cybernode.ai.distributed_codeforge.workspace_service.entity.ProjectFi
 import com.cybernode.ai.distributed_codeforge.workspace_service.mapper.ProjectFileMapper;
 import com.cybernode.ai.distributed_codeforge.workspace_service.repository.ProjectFileRepository;
 import com.cybernode.ai.distributed_codeforge.workspace_service.repository.ProjectRepository;
+import com.cybernode.ai.distributed_codeforge.workspace_service.client.IntelligenceClient;
 import com.cybernode.ai.distributed_codeforge.workspace_service.service.ProjectFileService;
 import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
@@ -31,8 +32,10 @@ public class ProjectFileServiceImpl implements ProjectFileService {
 
     private final ProjectRepository projectRepository;
     private final ProjectFileRepository projectFileRepository;
-    private  final MinioClient minioClient;
+    private final MinioClient minioClient;
     private final ProjectFileMapper projectFileMapper;
+    private final IntelligenceClient intelligenceClient;
+
 
     @Value("${minio.project-bucket}")
     private String projectBucket;
@@ -99,10 +102,18 @@ public class ProjectFileServiceImpl implements ProjectFileService {
             file.setUpdatedAt(Instant.now());
             projectFileRepository.save(file);
             log.info("Saved file: {}", objectKey);
+
+            // Trigger AI embedding updates asynchronously or synchronously via internal client
+            try {
+                intelligenceClient.reindexFile(projectId, cleanPath, fileContent);
+            } catch (Exception e) {
+                log.warn("Failed to update RAG embeddings for file: {}/{}", projectId, cleanPath, e);
+            }
         } catch (Exception e) {
             log.error("Failed to save file {}/{}", projectId, cleanPath, e);
             throw new RuntimeException("File save failed", e);
         }
+
     }
 
     private String determineContentType(String path) {

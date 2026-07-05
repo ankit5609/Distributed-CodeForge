@@ -7,7 +7,7 @@ spring:
       uri: https://github.com/ankit5609/codeforge-config-server.git
       username: ankit5609
 #      password: {GITHUB TOKEN}
-      password: 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
+      password: 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
       default-label: main
 
 server.port: 8888
