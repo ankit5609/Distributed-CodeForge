@@ -28,6 +28,7 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.metadata.Usage;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.ai.vectorstore.VectorStore;
 
@@ -237,16 +238,27 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                             "New Turns to Add:\n" + conversationContext.toString() + "\n\n" +
                             "Provide only the updated summary text. Do not include any intro or outro comments.";
 
-                    String newSummary = chatClient.prompt()
+                    ChatResponse summarizationResponse = chatClient.prompt()
                             .user(summarizationPrompt)
                             .call()
-                            .content();
+                            .chatResponse();
 
-                    if (newSummary != null && !newSummary.trim().isEmpty()) {
-                        managedSession.setSummary(newSummary.trim());
-                        managedSession.setLastSummarizedMessageId(toSummarize.get(toSummarize.size() - 1).getId());
-                        chatSessionRepository.save(managedSession);
-                        log.info("Successfully updated conversational summary for project: {}", projectId);
+                    if (summarizationResponse != null && summarizationResponse.getResult() != null) {
+                        String newSummary = summarizationResponse.getResult().getOutput().getText();
+
+                        if (newSummary != null && !newSummary.trim().isEmpty()) {
+                            managedSession.setSummary(newSummary.trim());
+                            managedSession.setLastSummarizedMessageId(toSummarize.get(toSummarize.size() - 1).getId());
+                            chatSessionRepository.save(managedSession);
+                            log.info("Successfully updated conversational summary for project: {}", projectId);
+
+                            // Record token usage for the summarization call
+                            if (summarizationResponse.getMetadata() != null && summarizationResponse.getMetadata().getUsage() != null) {
+                                int summarizationTokens = summarizationResponse.getMetadata().getUsage().getTotalTokens();
+                                usageService.recordTokenUsage(managedSession.getId().getUserId(), summarizationTokens);
+                                log.info("Recorded {} tokens for background summarization call", summarizationTokens);
+                            }
+                        }
                     }
                 }
             }
