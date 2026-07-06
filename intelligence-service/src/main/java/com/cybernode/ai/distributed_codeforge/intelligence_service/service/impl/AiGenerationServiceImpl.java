@@ -36,9 +36,12 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.scheduler.Schedulers;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 
@@ -70,13 +73,22 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         SecurityContext securityContext = SecurityContextHolder.getContext();
         ChatSession chatSession=createChatSessionIfNotExists(projectId,userId);
 
-        // Load prior turns for THIS project+user only (chatSession is keyed by ChatSessionId(projectId, userId),
-        // so this can never pull in another project's history).
-        List<Message> history = chatMessageRepository.findByChatSession(chatSession).stream()
+        // Load the last 10 messages for THIS project+user to avoid bloating the context window
+        List<ChatMessage> recentList = chatMessageRepository.findTop10ByChatSessionOrderByIdDesc(chatSession);
+        List<ChatMessage> chronological = new ArrayList<>(recentList);
+        Collections.reverse(chronological);
+
+        List<Message> history = chronological.stream()
                 .map(m -> m.getRole() == MessageRole.USER
                         ? (Message) new UserMessage(m.getContent())
                         : (Message) new AssistantMessage(m.getContent() == null ? "" : m.getContent()))
                 .toList();
+
+        // Inject existing conversational summary if it exists into the system prompt context
+        String systemPrompt = PromptUtils.CODE_GENERATION_SYSTEM_PROMPT;
+        if (chatSession.getSummary() != null && !chatSession.getSummary().trim().isEmpty()) {
+            systemPrompt += "\n\nHere is a summary of the older conversation history:\n" + chatSession.getSummary();
+        }
 
         Map<String,Object> advisorParams=Map.of(
                 "userId",userId,
@@ -91,8 +103,9 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         AtomicReference<Usage> usageRef = new AtomicReference<>();
 
         return chatClient.prompt()
-                .system(PromptUtils.CODE_GENERATION_SYSTEM_PROMPT)
+                .system(systemPrompt)
                 .messages(history)
+
                 .user(userMessage)
                 .tools(codeGenerationTools)
                 .advisors(advisorSpec -> {
@@ -191,7 +204,53 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                 });
 
         chatEventRepository.saveAll(chatEventList);
+
+        // Perform incremental summarization if the chat session grows beyond the 10-message rolling window
+        try {
+            ChatSession managedSession = chatSessionRepository.findById(chatSession.getId()).orElse(chatSession);
+            List<ChatMessage> recentList = chatMessageRepository.findTop10ByChatSessionOrderByIdDesc(managedSession);
+            
+            if (recentList.size() == 10) {
+                Long boundaryId = recentList.get(9).getId();
+                List<ChatMessage> toSummarize = chatMessageRepository.findOlderMessagesToSummarize(
+                        managedSession, 
+                        boundaryId, 
+                        managedSession.getLastSummarizedMessageId()
+                );
+
+                if (toSummarize != null && !toSummarize.isEmpty()) {
+                    log.info("Summarizing {} older messages pushed out of the rolling window for session {}", toSummarize.size(), managedSession.getId());
+                    StringBuilder conversationContext = new StringBuilder();
+                    for (ChatMessage msg : toSummarize) {
+                        conversationContext.append(msg.getRole().name()).append(": ").append(msg.getContent()).append("\n");
+                    }
+
+                    String currentSummary = managedSession.getSummary() != null ? managedSession.getSummary() : "None";
+                    String summarizationPrompt = "You are a conversational summary assistant. " +
+                            "Your task is to update the existing summary of a developer chat session with the newly provided turns. " +
+                            "Keep the summary concise, organized, and focused on the technical goals and files modified. Do not lose key context.\n\n" +
+                            "Existing Summary:\n" + currentSummary + "\n\n" +
+                            "New Turns to Add:\n" + conversationContext.toString() + "\n\n" +
+                            "Provide only the updated summary text. Do not include any intro or outro comments.";
+
+                    String newSummary = chatClient.prompt()
+                            .user(summarizationPrompt)
+                            .call()
+                            .content();
+
+                    if (newSummary != null && !newSummary.trim().isEmpty()) {
+                        managedSession.setSummary(newSummary.trim());
+                        managedSession.setLastSummarizedMessageId(toSummarize.get(toSummarize.size() - 1).getId());
+                        chatSessionRepository.save(managedSession);
+                        log.info("Successfully updated conversational summary for project: {}", projectId);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("Failed to run incremental conversational summarization for project: {}", projectId, e);
+        }
     }
+
 
 //    private void parseAndSaveFiles(String fullResponse, Long projectId) {
 //        Matcher matcher=FILE_TAG_PATTERN.matcher(fullResponse);

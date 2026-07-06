@@ -28,5 +28,13 @@ public class ChatSession {
     @UpdateTimestamp
     Instant updatedAt;
 
+    // Running summary of older messages pushed out of the rolling window
+    @Column(columnDefinition = "text")
+    String summary;
+
+    // Latest message ID that has been integrated into the summary
+    Long lastSummarizedMessageId;
+
     Instant deletedAt;
+
 }
