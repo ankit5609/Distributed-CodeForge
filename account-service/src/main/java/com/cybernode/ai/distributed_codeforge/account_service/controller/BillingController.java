@@ -4,14 +4,18 @@ package com.cybernode.ai.distributed_codeforge.account_service.controller;
 import com.cybernode.ai.distributed_codeforge.account_service.service.PaymentProcessor;
 import com.cybernode.ai.distributed_codeforge.account_service.service.SubscriptionService;
 import com.cybernode.ai.distributed_codeforge.account_service.dto.subscription.*;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequiredArgsConstructor
 @Slf4j
+@Validated
 public class BillingController {
 
     private final SubscriptionService subscriptionService;
@@ -24,7 +28,7 @@ public class BillingController {
 
     @PostMapping("/payments/checkout")
     public ResponseEntity<CheckoutResponse> createCheckoutResponse(
-            @RequestBody CheckoutRequest request){
+            @RequestBody @Valid CheckoutRequest request){
         return ResponseEntity.ok(paymentProcessor.createCheckoutSessionUrl(request));
     }
 
@@ -35,7 +39,7 @@ public class BillingController {
 
     @PostMapping("/webhooks/payment")
     public ResponseEntity<Void> handlePaymentWebhooks(@RequestBody String payload,
-                                                      @RequestHeader("Stripe-Signature") String sigHeader){
+                                                      @RequestHeader("Stripe-Signature") @NotBlank String sigHeader){
         paymentProcessor.processWebhook(payload, sigHeader);
         return ResponseEntity.ok().build();
     }

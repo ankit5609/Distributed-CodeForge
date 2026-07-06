@@ -7,7 +7,12 @@ import com.cybernode.ai.distributed_codeforge.account_service.service.Subscripti
 import com.cybernode.ai.distributed_codeforge.common_lib.dto.PlanDto;
 import com.cybernode.ai.distributed_codeforge.common_lib.dto.UserDto;
 import com.cybernode.ai.distributed_codeforge.common_lib.error.ResourceNotFoundException;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Optional;
@@ -15,6 +20,7 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/internal/v1")
 @RequiredArgsConstructor
+@Validated
 public class InternalAccountController {
 
     private final UserRepository userRepository;
@@ -22,14 +28,14 @@ public class InternalAccountController {
     private final SubscriptionService subscriptionService;
 
     @GetMapping("/users/{id}")
-    public UserDto getUserById(@PathVariable Long id) {
+    public UserDto getUserById(@PathVariable @NotNull @Min(1) Long id) {
         return userRepository.findById(id)
                 .map(userMapper::toUserDto)
                 .orElseThrow(() -> new ResourceNotFoundException("User", id.toString()));
     }
 
     @GetMapping("/users/by-email")
-    public Optional<UserDto> getUserByEmail(@RequestParam String email) {
+    public Optional<UserDto> getUserByEmail(@RequestParam @NotBlank @Email String email) {
         return userRepository.findByUsernameIgnoreCase(email)
                 .map(userMapper::toUserDto);
     }

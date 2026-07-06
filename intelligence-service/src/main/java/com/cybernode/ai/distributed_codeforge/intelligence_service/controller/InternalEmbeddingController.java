@@ -1,8 +1,12 @@
 package com.cybernode.ai.distributed_codeforge.intelligence_service.controller;
 
 import com.cybernode.ai.distributed_codeforge.intelligence_service.service.EmbeddingService;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -14,14 +18,15 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/internal/v1/embeddings")
 @RequiredArgsConstructor
 @Slf4j
+@Validated
 public class InternalEmbeddingController {
 
     private final EmbeddingService embeddingService;
 
     @PostMapping("/reindex")
     public void reindexFile(
-            @RequestParam("projectId") Long projectId,
-            @RequestParam("path") String path,
+            @RequestParam("projectId") @NotNull @Min(1) Long projectId,
+            @RequestParam("path") @NotBlank String path,
             @RequestBody String content
     ) {
         log.info("Received internal reindex request for project {} file {}", projectId, path);
