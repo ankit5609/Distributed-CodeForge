@@ -8,4 +8,6 @@ import com.cybernode.ai.distributed_codeforge.account_service.dto.auth.SignUpReq
 public interface AuthService {
      AuthResponse signup(SignUpRequest request);
      AuthResponse login(LoginRequest request);
+     void forgotPassword(String email);
+     void resetPassword(String token, String newPassword);
 }

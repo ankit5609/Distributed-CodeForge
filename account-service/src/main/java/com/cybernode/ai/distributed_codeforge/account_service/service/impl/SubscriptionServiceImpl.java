@@ -20,6 +20,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.kafka.core.KafkaTemplate;
+import com.cybernode.ai.distributed_codeforge.common_lib.event.NotificationEvent;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -36,6 +38,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     private final UserRepository userRepository;
     private final PlanRepository planRepository;
     private final IntelligenceClient intelligenceClient;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
 
     @Value("${app.billing.mode:LOCAL}")
     private String billingMode;
@@ -122,6 +125,9 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         
         SubscriptionStatus finalStatus = adjustStatusForDemoMode(status);
         if(finalStatus!=null && finalStatus!=subscription.getStatus()){
+            if (finalStatus == SubscriptionStatus.ACTIVE && subscription.getStatus() != SubscriptionStatus.ACTIVE) {
+                sendNotificationEvent("SUBSCRIPTION_CREATED", subscription.getUser().getId(), "Subscription activated for plan: " + (subscription.getPlan() != null ? subscription.getPlan().getName() : "Unknown"));
+            }
             subscription.setStatus(finalStatus);
             hasSubscriptionUpdated=true;
         }
@@ -157,7 +163,17 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         Subscription subscription=getSubscription(gatewaySubscriptionId);
         subscription.setStatus(SubscriptionStatus.CANCELED);
         subscriptionRepository.save(subscription);
+        sendNotificationEvent("SUBSCRIPTION_CANCELLED", subscription.getUser().getId(), "Subscription cancelled");
+    }
 
+    private void sendNotificationEvent(String type, Long userId, String message) {
+        try {
+            NotificationEvent event = new NotificationEvent(type, userId, message);
+            kafkaTemplate.send("notification-events", userId != null ? userId.toString() : "global", event);
+            log.info("Successfully published Kafka notification event: {}", event);
+        } catch (Exception e) {
+            log.error("Failed to publish Kafka notification event for user: {}", userId, e);
+        }
     }
 
     @Override

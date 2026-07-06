@@ -7,19 +7,24 @@ import com.cybernode.ai.distributed_codeforge.intelligence_service.entity.UsageL
 import com.cybernode.ai.distributed_codeforge.intelligence_service.repository.UsageLogRepository;
 import com.cybernode.ai.distributed_codeforge.intelligence_service.service.UsageService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.kafka.core.KafkaTemplate;
+import com.cybernode.ai.distributed_codeforge.common_lib.event.NotificationEvent;
 
 import java.time.LocalDate;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class UsageServiceImpl implements UsageService {
 
     private final UsageLogRepository usageLogRepository;
     private final AuthUtil authUtil;
     private final AccountClient accountClient;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
 
     @Override
     public void recordTokenUsage(Long userId, int actualToken) {
@@ -44,11 +49,22 @@ public class UsageServiceImpl implements UsageService {
         int currentUsage=todayLog.getTokensUsed();
         int limit=plan.maxTokensPerDay();
         if(currentUsage>=limit){
+            sendNotificationEvent("TOKEN_LIMIT_REACHED", userId, "Daily AI token usage limit reached (" + limit + " tokens)");
             throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
                     "Daily limit reached, Upgrade now");
         }
 
 
+    }
+
+    private void sendNotificationEvent(String type, Long userId, String message) {
+        try {
+            NotificationEvent event = new NotificationEvent(type, userId, message);
+            kafkaTemplate.send("notification-events", userId != null ? userId.toString() : "global", event);
+            log.info("Successfully published Kafka notification event: {}", event);
+        } catch (Exception e) {
+            log.error("Failed to publish Kafka notification event for user: {}", userId, e);
+        }
     }
 
     private UsageLog createNewDailyUsageLog(Long userId, LocalDate date){

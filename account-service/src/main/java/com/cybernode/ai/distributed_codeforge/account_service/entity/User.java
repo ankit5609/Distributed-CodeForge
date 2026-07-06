@@ -33,6 +33,12 @@ public class User {
     @Column(unique = true)
     String stripeCustomerId;
 
+    @Setter
+    private String resetPasswordToken;
+
+    @Setter
+    private Instant resetPasswordTokenExpiresAt;
+
     @CreationTimestamp
     private Instant createdAt;
     @UpdateTimestamp
