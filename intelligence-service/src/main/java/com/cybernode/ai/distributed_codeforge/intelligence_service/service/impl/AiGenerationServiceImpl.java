@@ -29,6 +29,8 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.ai.vectorstore.VectorStore;
+
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -60,6 +62,8 @@ public class AiGenerationServiceImpl implements AiGenerationService {
     private final WorkspaceClient workspaceClient;
     private final UsageService usageService;
     private final KafkaTemplate<String,Object> kafkaTemplate;
+    private final VectorStore vectorStore;
+
 
 
     private static final Pattern FILE_TAG_PATTERN =
@@ -96,7 +100,7 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         );
 
         StringBuilder fullResponseBuffer=new StringBuilder();
-        CodeGenerationTools codeGenerationTools=new CodeGenerationTools(projectId,workspaceClient);
+        CodeGenerationTools codeGenerationTools=new CodeGenerationTools(projectId,workspaceClient,vectorStore);
 
         AtomicReference<Long>  startTime=new AtomicReference<>(System.currentTimeMillis());
         AtomicReference<Long>  endTime=new AtomicReference<>(0L);
@@ -164,7 +168,7 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                         .chatSession(chatSession)
                         .role(MessageRole.USER)
                         .content(userMessage)
-                        .tokensUsed(usage.getPromptTokens())
+                        .tokensUsed(usage!=null?usage.getPromptTokens():0)
                 .build()
         );
 
