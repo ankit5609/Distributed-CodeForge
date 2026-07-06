@@ -73,6 +73,13 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         usageService.checkDailyTokensUsage();
         Long userId= authUtil.getCurrentUserId();
 
+        final String effectiveUserMessage;
+        if ((userMessage == null || userMessage.trim().isEmpty()) && image != null && !image.isEmpty()) {
+            effectiveUserMessage = "Build a matching React component or page that replicates the layout, styling, and design elements shown in this image.";
+        } else {
+            effectiveUserMessage = userMessage;
+        }
+
         SecurityContext securityContext = SecurityContextHolder.getContext();
         ChatSession chatSession=createChatSessionIfNotExists(projectId,userId);
 
@@ -148,7 +155,7 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                 .system(systemPrompt)
                 .messages(history)
                 .user(u -> {
-                    u.text(userMessage);
+                    u.text(effectiveUserMessage);
                     if (image != null && !image.isEmpty()) {
                         try {
                             u.media(
@@ -188,7 +195,7 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                         SecurityContextHolder.setContext(securityContext); // restore
                         try {
                             Long duration=(endTime.get()-startTime.get())/1000;
-                            finalizeChats(userMessage, finalImageUrl, chatSession, fullResponseBuffer.toString(), projectId, duration, usageRef.get(), userId);
+                            finalizeChats(effectiveUserMessage, finalImageUrl, chatSession, fullResponseBuffer.toString(), projectId, duration, usageRef.get(), userId);
                         } finally {
                             SecurityContextHolder.clearContext();
                         }

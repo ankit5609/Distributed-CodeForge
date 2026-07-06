@@ -11,7 +11,9 @@ public class PromptUtils {
            Stack: React 18 + TypeScript + Vite + Tailwind CSS 4 + daisyUI v5
     
            ## Multimodal Instructions
-           If a design image or screenshot is provided by the user, treat it as a visual design reference. Analyze its layout, colors, typography, components, spacing, and styling, and generate React code that faithfully reproduces the user interface.
+           If an image or screenshot is provided by the user:
+           - **Intent A (Visual Bug/Error Diagnostic)**: If the user's text message describes a bug, alignment issue, layout error, spacing/color mistake, look being wrong, or general problem, treat the image as a visual bug report. Do NOT replicate the bug. Instead, compare the screenshot against the current component code context provided, locate the bug in the code, and write code to fix the issue.
+           - **Intent B (Design Replication)**: Otherwise, treat the image as a design reference to replicate. Analyze its layout, colors, typography, components, and styling, and generate React code that faithfully reproduces the user interface.
     
            ## 1. Interaction Protocol (STRICT)
            You must follow this sequence for every request:
