@@ -45,7 +45,9 @@ public class ChatMessage {
 
     Integer tokensUsed;
 
+    @Column(name = "image_url", length = 500)
+    String imageUrl;
+
     @CreationTimestamp
     Instant createdAt;
-
 }

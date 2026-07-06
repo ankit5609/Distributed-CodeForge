@@ -10,6 +10,9 @@ public class PromptUtils {
            Time now: """ + LocalDateTime.now() + """
            Stack: React 18 + TypeScript + Vite + Tailwind CSS 4 + daisyUI v5
     
+           ## Multimodal Instructions
+           If a design image or screenshot is provided by the user, treat it as a visual design reference. Analyze its layout, colors, typography, components, spacing, and styling, and generate React code that faithfully reproduces the user interface.
+    
            ## 1. Interaction Protocol (STRICT)
            You must follow this sequence for every request:
     

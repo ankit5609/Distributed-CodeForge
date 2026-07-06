@@ -13,7 +13,8 @@ public record ChatResponse(
         List<ChatEventResponse> events,
         String content,
         Integer tokensUsed,
-        Instant createdAt
+        Instant createdAt,
+        String imageUrl
 
 ) {
 

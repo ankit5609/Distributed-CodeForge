@@ -24,27 +24,25 @@ import com.cybernode.ai.distributed_codeforge.intelligence_service.service.Usage
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.ai.content.Media;
 import org.springframework.ai.vectorstore.VectorStore;
-
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.util.MimeTypeUtils;
+import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
 import reactor.core.scheduler.Schedulers;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
+import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 
@@ -71,12 +69,25 @@ public class AiGenerationServiceImpl implements AiGenerationService {
             Pattern.compile("<file path=\"([^\"]+)\">(.*?)</file>", Pattern.DOTALL);
     @Override
     @PreAuthorize("@security.canEditProject(#projectId)")
-    public Flux<StreamResponse> streamResponse(String userMessage, Long projectId) {
+    public Flux<StreamResponse> streamResponse(String userMessage, Long projectId, MultipartFile image) {
         usageService.checkDailyTokensUsage();
         Long userId= authUtil.getCurrentUserId();
 
         SecurityContext securityContext = SecurityContextHolder.getContext();
         ChatSession chatSession=createChatSessionIfNotExists(projectId,userId);
+
+        // Upload image synchronously to get final URL
+        String uploadedImageUrl = null;
+        if (image != null && !image.isEmpty()) {
+            try {
+                String fileName = workspaceClient.uploadChatAttachment(projectId, image);
+                uploadedImageUrl = "/api/v1/workspace/projects/" + projectId + "/files/attachments/" + fileName;
+                log.info("Saved user uploaded image. Relative URL: {}", uploadedImageUrl);
+            } catch (Exception e) {
+                log.error("Failed to upload user image to MinIO via workspace-service", e);
+            }
+        }
+        final String finalImageUrl = uploadedImageUrl;
 
         // Load the last 10 messages for THIS project+user to avoid bloating the context window
         List<ChatMessage> recentList = chatMessageRepository.findTop10ByChatSessionOrderByIdDesc(chatSession);
@@ -84,9 +95,35 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         Collections.reverse(chronological);
 
         List<Message> history = chronological.stream()
-                .map(m -> m.getRole() == MessageRole.USER
-                        ? (Message) new UserMessage(m.getContent())
-                        : (Message) new AssistantMessage(m.getContent() == null ? "" : m.getContent()))
+                .map(m -> {
+                    if (m.getRole() == MessageRole.USER) {
+                        if (m.getImageUrl() != null && !m.getImageUrl().trim().isEmpty()) {
+                            try {
+                                String url = m.getImageUrl();
+                                String fileName = url.substring(url.lastIndexOf("/") + 1);
+                                byte[] imgBytes = workspaceClient.getChatAttachment(projectId, fileName);
+                                String mimeType = java.net.URLConnection.guessContentTypeFromName(fileName);
+                                if (mimeType == null) {
+                                    mimeType = "image/png";
+                                }
+                                 return (Message) UserMessage.builder()
+                                         .text(m.getContent())
+                                         .media(new Media(
+                                                 MimeTypeUtils.parseMimeType(mimeType),
+                                                 new ByteArrayResource(imgBytes)
+                                         ))
+                                         .build();
+                            } catch (Exception e) {
+                                log.error("Failed to load attachment for history message {}", m.getId(), e);
+                                return (Message) new UserMessage(m.getContent());
+                            }
+                        } else {
+                            return (Message) new UserMessage(m.getContent());
+                        }
+                    } else {
+                        return (Message) new AssistantMessage(m.getContent() == null ? "" : m.getContent());
+                    }
+                })
                 .toList();
 
         // Inject existing conversational summary if it exists into the system prompt context
@@ -110,8 +147,19 @@ public class AiGenerationServiceImpl implements AiGenerationService {
         return chatClient.prompt()
                 .system(systemPrompt)
                 .messages(history)
-
-                .user(userMessage)
+                .user(u -> {
+                    u.text(userMessage);
+                    if (image != null && !image.isEmpty()) {
+                        try {
+                            u.media(
+                                    MimeTypeUtils.parseMimeType(image.getContentType()),
+                                    new ByteArrayResource(image.getBytes())
+                            );
+                        } catch (Exception e) {
+                            throw new RuntimeException("Failed to read image bytes", e);
+                        }
+                    }
+                })
                 .tools(codeGenerationTools)
                 .advisors(advisorSpec -> {
                     advisorSpec.params(advisorParams);
@@ -139,9 +187,8 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                     Schedulers.boundedElastic().schedule(()-> {
                         SecurityContextHolder.setContext(securityContext); // restore
                         try {
-//                            parseAndSaveFiles(fullResponseBuffer.toString(), projectId);
                             Long duration=(endTime.get()-startTime.get())/1000;
-                            finalizeChats(userMessage,chatSession, fullResponseBuffer.toString(),projectId,duration,usageRef.get(),userId);
+                            finalizeChats(userMessage, finalImageUrl, chatSession, fullResponseBuffer.toString(), projectId, duration, usageRef.get(), userId);
                         } finally {
                             SecurityContextHolder.clearContext();
                         }
@@ -158,7 +205,7 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                 });
     }
 
-    private void finalizeChats(String userMessage, ChatSession chatSession,String fullText, Long projectId, Long duration, Usage usage, Long userId){
+    private void finalizeChats(String userMessage, String imageUrl, ChatSession chatSession, String fullText, Long projectId, Long duration, Usage usage, Long userId){
         if(usage != null) {
             int totalTokens = usage.getTotalTokens();
             usageService.recordTokenUsage(chatSession.getId().getUserId(), totalTokens);
@@ -169,6 +216,7 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                         .chatSession(chatSession)
                         .role(MessageRole.USER)
                         .content(userMessage)
+                        .imageUrl(imageUrl)
                         .tokensUsed(usage!=null?usage.getPromptTokens():0)
                 .build()
         );
@@ -178,7 +226,7 @@ public class AiGenerationServiceImpl implements AiGenerationService {
                 .chatSession(chatSession)
                 .role(MessageRole.ASSISTANT)
                 .content(fullText)
-                .tokensUsed(usage.getCompletionTokens())
+                .tokensUsed(usage!=null?usage.getCompletionTokens():0)
                 .build();
         assistantChatMessage=chatMessageRepository.save(assistantChatMessage);
 
