@@ -48,12 +48,15 @@
 
 ## 📖 Overview
 
-**Distributed CodeForge** is a world-class, cloud-native collaborative IDE and preview sandbox platform. Built on a modular microservices architecture, it enables:
+**Distributed CodeForge** is a world-class, cloud-native collaborative IDE and preview sandbox platform. Built on a modular microservices architecture, it features a state-of-the-art AI code generation and execution engine:
 
-- 💻 **Real-time collaborative coding** — multi-user project access with role-based permissions
-- 🧠 **AI-driven code generation** — streaming LLM chat with file edit Sagas, vector context retrieval, and visual bug diagnosis via image uploads
-- 🏗️ **Instant Kubernetes sandbox previews** — isolated runner pods with pre-warmed standby pools, MinIO file syncing, and subdomain-based proxy routing
-- 💳 **Integrated billing** — Stripe checkout, subscription plans, and token usage enforcement
+- 💻 **Real-Time Collaborative Coding** — Multi-user project access with real-time directory updates and role-based permissions.
+- 🧠 **Spring AI & LLM Engine** — Streaming LLM chat using OpenAI drivers via OpenRouter, featuring a strict XML prompt protocol for planning and execution.
+- 🐘 **pgvector-Powered RAG Engine** — Context injection utilizing PostgreSQL `pgvector` semantic search, injecting project file trees and relevant code snippets dynamically.
+- 👁️ **Multimodal Visual Diagnostics** — Support for visual bug diagnostics and design replication using image/screenshot attachments via `multipart/form-data` streams.
+- 🩺 **Compile-Error Self-Healing Loop** — Run-time preview builder verifying code syntax, searching past build-error solutions in `pgvector`, and recording resolution diffs to self-heal compiler crashes.
+- 🏗️ **Instant Kubernetes Sandbox Previews** — Isolated runner pods with pre-warmed standby pools, MinIO file syncing, and subdomain-based proxy routing.
+- 💳 **Integrated Billing** — Stripe checkout, subscription plans, and token usage enforcement.
 
 ---
 
@@ -296,6 +299,46 @@ TOKEN_LIMIT_REACHED                                               NotificationEv
    - Regular queries → semantic search (`topK=5`)
    - Bug reports with image uploads → aggressive retrieval (`topK=10`) + filename matching
 3. **Prompt Assembly**: Relevant file chunks are prepended to the LLM system prompt as context before streaming begins.
+
+---
+
+## 🧠 LLM, pgvector RAG, & Compile-Error Self-Healing
+
+Distributed CodeForge integrates a highly advanced artificial intelligence suite powered by **Spring AI**, **pgvector Vector Store**, and custom tool-calling agents.
+
+### 1. Spring AI & LLM Prompt Protocol
+All LLM prompts are handled by the `intelligence-service` using the Spring AI framework configured with the OpenAI model driver connected to OpenRouter (`AI_API_KEY`).
+* **XML Prompt Protocol**: The LLM operates under a strict persona template defined in `PromptUtils.java`. It must format all streaming output in XML structures:
+  - `<tool args="paths">message</tool>`: Declares that the model will read files. Must precede calls to the `read_files` tool.
+  - `<message phase="start|planning|completed">...</message>`: Explains planning and outcomes.
+  - `<file path="path/to/file">...</file>`: Holds the complete file content. No placeholders or partial code are allowed.
+* **Atomic Updates Constraint**: To enforce clean updates and prevent repetitive code churn, the model can output a specific `<file path="...">` exactly once per response.
+
+### 2. Retrieval-Augmented Generation (RAG) Architecture
+Rather than dumping the entire repository context window into the LLM (which is slow and expensive), the system implements a dynamic RAG pipeline inside `FileTreeContextAdvisor.java` which implements the Spring AI `StreamAdvisor` interface:
+1. **Active File Tree Injection**: A lightweight representation of the active workspace paths is fetched from `workspace-service` via a Feign Client and appended as a system message.
+2. **PostgreSQL pgvector Similarity Search**: The last user message is vectorized and matched against project files in the `intelligence_db`'s vector store (`vectorStore.similaritySearch`). The lookup uses dynamic metadata filtering: `projectId == {projectId}`.
+3. **Intent-based Top-K Escalation**:
+   - **Regular Queries**: Fetches the top `5` matching code blocks.
+   - **Visual Bug Reports / Layout issues**: If the question matches `isBugReport` (contains keywords like "bug", "spacing", "disappear", "crash", "wrong"), the system escalates retrieval to `topK = 10` to get broader code coverage.
+4. **Explicit File Resolution**: For bug reports, the system splits the prompt terms and matches them against the file tree. Any matching filenames or paths are aggressively loaded using `workspaceClient.getFileContent` and appended as raw files inside the system context.
+
+### 3. Multimodal Visual Diagnostics
+* **Image Upload**: Users can drag and drop screenshots (e.g., of a frontend compiler error, alignment issue, or layout mock).
+* **Multipart Processing**: The frontend streams requests as `multipart/form-data`. The image is saved to MinIO and served as a relative URL (`/api/v1/workspace/projects/{id}/files/attachments/...`).
+* **Intent Bifurcation**: The system prompt instructs the multimodal LLM:
+  - **Intent A (Visual Bug Diagnostic)**: If the prompt describes a layout bug or misalignment, compare the image against the retrieved code context to pinpoint the bug, compile a fix, and write the corrected code.
+  - **Intent B (Design Replication)**: If the prompt is a UI design screenshot, reconstruct it by writing matching React/Vite/Tailwind code.
+
+### 4. Compile-Error Self-Healing Loop (Feedback Loop)
+The platform features an autonomous compile-verification and self-correcting loop implemented in `CodeGenerationTools.java`:
+1. **Tool Invocation**: After generating or editing code, the LLM is instructed to run the `deploy_and_verify_preview` tool.
+2. **Build Monitoring**: The tool triggers a GKE rollout via `workspace-service` Feign client. It polls deployment status and logs for 15 iterations (30 seconds total).
+3. **Error Capture & Healing**: If the state is `CRASHED` (e.g., TypeScript or Vite compiler error), the tool returns the compilation logs back to the LLM. 
+4. **pgvector Fix Archives**:
+   - Before returning the error logs, the tool queries pgvector for any past build fixes using a threshold of `0.7` similarity. If a matching past fix exists, the metadata diff is injected as a `HINT`.
+   - The LLM updates code using the hint, then calls `deploy_and_verify_preview` again.
+   - Once the build returns `SUCCESS`, the tool snapshots the workspace files, computes a simple diff (before vs after), and stores the compilation error text along with the successful diff as a document in pgvector with tag `type: 'error_fix'`. This creates an in-memory learning loop for developer workspace errors.
 
 ---
 

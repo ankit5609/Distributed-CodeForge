@@ -1,14 +1,17 @@
-# Distributed CodeForge: Comprehensive Brain.md
+# 🚀 Distributed CodeForge: Comprehensive Brain.md
 
-This document serves as the single source of truth for the **Distributed CodeForge** project, detailing its architecture, code structure, dependencies, runtime flows, and operational procedures.
+This document serves as the single source of truth for the **Distributed CodeForge** project, detailing its microservice architecture, LLM streaming pipelines, pgvector-based RAG engines, self-healing runtime compile loops, and Kubernetes orchestrations.
 
 ---
 
-## 1. Project Purpose
+## 1. Project Purpose & Core Capabilities
 **Distributed CodeForge** is a cloud-native, collaborative IDE and preview sandbox platform designed for developers. The platform enables users to:
-1. Manage projects, write code, and collaborate in real-time.
-2. Interact with an AI coding assistant to query, explain, or edit files directly inside the workspace.
-3. Boot isolated, instant, and secure preview environments to run and test web applications (e.g., React/Vite development servers) directly from their browser.
+1. **Manage projects, write code, and collaborate in real-time**: Multi-user workspace access with full directory layout tracking.
+2. **AI-driven Coding & LLM Integration (Spring AI)**: Stream chat replies and file modifications directly inside the workspace using OpenAI drivers via OpenRouter.
+3. **Advanced pgvector RAG (Retrieval-Augmented Generation)**: Lightweight project file trees and semantic code retrieval injected as context to guide LLM prompts.
+4. **Multimodal Visual Diagnostics & Design Replication**: Input visual screenshot attachments (visual bug diagnostic uploads or design mocks) via `multipart/form-data` endpoints.
+5. **Self-Healing Run-time Compile Memory**: AI self-corrects compile/runtime logs from runner pods, archiving successful fix diffs in the vector store for dynamic future assistance.
+6. **Isolated Sandbox Previews**: Boot instant preview environments (React/Vite dev servers) directly from the browser inside dedicated Kubernetes namespaces.
 
 ---
 
@@ -344,14 +347,43 @@ To setup the full deployment stack locally using **Kind (Kubernetes in Docker)**
 
 ---
 
-## 18. Compile-Error Self-Healing Memory & RAG Retrieval
-1. **Self-Healing Memory**:
-   - `CodeGenerationTools` intercepts maven compile-build logs on sandbox error (`CRASHED`).
-   - Computes diffs of the fixes and indexes them into the `pgvector` store with `type: "error_fix"`.
-   - On subsequent build errors, the platform performs similarity searches on the error log messages to fetch matching resolution suggestions.
-2. **Context RAG Routing**:
-   - The platform parses user requests to classify them. For visual bug diagnostic uploads (`isBugReport`), the system scales vector retrieval depth (`topK` from `5` to `10`) and executes loose filename matching against files in the workspace tree to aggressively inject code context.
+## 18. LLM Prompt Protocols, pgvector RAG Retrieval, & Compile-Error Self-Healing
 
+Distributed CodeForge leverages a sophisticated AI engine powered by **Spring AI**, **pgvector Vector Store**, and custom tool-calling agents.
+
+### A. Core LLM & XML Prompt Protocol
+All LLM prompts are managed through the central `intelligence-service`. The system utilizes standard system templates defined in `PromptUtils.java` to set up an **Elite React Architect** persona:
+- **XML Message Format**: The LLM is instructed to stream output strictly wrapped in custom XML tag structures:
+  - `<tool args="path1,path2">message</tool>`: Declares that the model will read files. Must precede calls to the `read_files` tool.
+  - `<message phase="start|planning|completed">...</message>`: Explains planning and outcomes.
+  - `<file path="path/to/file">...</file>`: Holds the complete file content. No placeholders or partial code are allowed.
+- **Atomic Updates Constraint**: The model can output a specific `<file path="...">` exactly once per response to enforce clean updates and prevent repetitive code churn.
+
+### B. Retrieval-Augmented Generation (RAG) Architecture
+Rather than dumping the entire repository context window into the LLM (which is slow and expensive), the system implements a dynamic RAG pipeline inside `FileTreeContextAdvisor.java` which implements the Spring AI `StreamAdvisor` interface:
+1. **Active File Tree Injection**: A lightweight representation of the active workspace paths is fetched from `workspace-service` via a Feign Client and appended as a system message.
+2. **PostgreSQL pgvector Similarity Search**: The last user message is vectorized and matched against project files in the `intelligence_db`'s vector store (`vectorStore.similaritySearch`). The lookup uses dynamic metadata filtering: `projectId == {projectId}`.
+3. **Intent-based Top-K Escalation**:
+   - **Regular Queries**: Fetches the top `5` matching code blocks.
+   - **Visual Bug Reports / Layout issues**: If the question matches `isBugReport` (contains keywords like "bug", "spacing", "disappear", "crash", "wrong"), the system escalates retrieval to `topK = 10` to get broader code coverage.
+4. **Explicit File Resolution**: For bug reports, the system splits the prompt terms and matches them against the file tree. Any matching filenames or paths are aggressively loaded using `workspaceClient.getFileContent` and appended as raw files inside the system context.
+
+### C. Multimodal Visual Diagnostics
+- **Image Upload**: Users can drag and drop screenshots (e.g., of a frontend compiler error, alignment issue, or layout mock).
+- **Multipart Processing**: The frontend streams requests as `multipart/form-data`. The image is saved to MinIO and served as a relative URL (`/api/v1/workspace/projects/{id}/files/attachments/...`).
+- **Intent Bifurcation**: The system prompt instructs the multimodal LLM:
+  - **Intent A (Visual Bug Diagnostic)**: If the prompt describes a layout bug or misalignment, compare the image against the retrieved code context to pinpoint the bug, compile a fix, and write the corrected code.
+  - **Intent B (Design Replication)**: If the prompt is a UI design screenshot, reconstruct it by writing matching React/Vite/Tailwind code.
+
+### D. Compile-Error Self-Healing Memory (Feedback Loop)
+The platform features an autonomous compile-verification and self-correcting loop implemented in `CodeGenerationTools.java`:
+1. **Tool Invocation**: After generating or editing code, the LLM is instructed to run the `deploy_and_verify_preview` tool.
+2. **Build Monitoring**: The tool triggers a GKE rollout via `workspace-service` Feign client. It polls deployment status and logs for 15 iterations (30 seconds total).
+3. **Error Capture & Healing**: If the state is `CRASHED` (e.g., TypeScript or Vite compiler error), the tool returns the compilation logs back to the LLM. 
+4. **pgvector Fix Archives**:
+   - Before returning the error logs, the tool queries pgvector for any past build fixes using a threshold of `0.7` similarity. If a matching past fix exists, the metadata diff is injected as a `HINT`.
+   - The LLM updates code using the hint, then calls `deploy_and_verify_preview` again.
+   - Once the build returns `SUCCESS`, the tool snapshots the workspace files, computes a simple diff (before vs after), and stores the compilation error text along with the successful diff as a document in pgvector with tag `type: 'error_fix'`. This creates an in-memory learning loop for developer workspace errors.
 
 ---
 
