@@ -120,6 +120,59 @@ Ensure Docker Desktop is running. Fire up the local infrastructure stack:
 ./start-cluster.sh
 ```
 
+### 1.1 Local Kubernetes Setup using Kind
+To run the full stack locally with matching Kubernetes orchestration, you can spin up a local cluster using **Kind (Kubernetes in Docker)**:
+
+1. **Create Kind Cluster Configuration (`kind-config.yaml`)**:
+   Create a cluster mapping host ports 80 and 443 to Kind's ingress container node:
+   ```yaml
+   apiVersion: kind.x-k8s.io/v1alpha4
+   kind: Cluster
+   nodes:
+   - role: control-plane
+     kubeadmConfigPatches:
+     - |
+       kind: InitConfiguration
+       nodeRegistration:
+         kubeletExtraArgs:
+           node-labels: "ingress-ready=true"
+     extraPortMappings:
+     - containerPort: 80
+       hostPort: 80
+       protocol: TCP
+     - containerPort: 443
+       hostPort: 443
+       protocol: TCP
+   ```
+
+2. **Boot Cluster**:
+   ```bash
+   kind create cluster --config kind-config.yaml
+   ```
+
+3. **Install NGINX Ingress Controller for Kind**:
+   ```bash
+   kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+   ```
+
+4. **Load Local Docker Images (Avoid Registry Pulls)**:
+   After compiling microservice images locally, load them directly into Kind:
+   ```bash
+   kind load docker-image ankit5609/codeforge-frontend:v1
+   kind load docker-image ankit5609/codeforge-workspace-service:v1
+   ```
+
+5. **Apply Manifests**:
+   Apply all config, databases, microservices, and sandbox templates in order:
+   ```bash
+   kubectl apply -f k8s/infra/namespaces.yaml
+   kubectl apply -f k8s/stateful/
+   kubectl apply -f k8s/services/
+   kubectl apply -f k8s/proxy/
+   kubectl apply -f k8s/infra/
+   ```
+
+
 ### 2. Build Services
 Package all microservices using the Maven wrapper:
 ```bash

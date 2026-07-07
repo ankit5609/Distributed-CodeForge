@@ -273,6 +273,51 @@ All environments fetch settings from the `config-service`. Key variables injecte
   kubectl logs deployment/workspace-service -n codeforge-core
   ```
 
+### 15.1 Local Cluster Setup with Kind
+To setup the full deployment stack locally using **Kind (Kubernetes in Docker)**:
+1. **Create config file (`kind-config.yaml`)**:
+   ```yaml
+   apiVersion: kind.x-k8s.io/v1alpha4
+   kind: Cluster
+   nodes:
+   - role: control-plane
+     kubeadmConfigPatches:
+     - |
+       kind: InitConfiguration
+       nodeRegistration:
+         kubeletExtraArgs:
+           node-labels: "ingress-ready=true"
+     extraPortMappings:
+     - containerPort: 80
+       hostPort: 80
+       protocol: TCP
+     - containerPort: 443
+       hostPort: 443
+       protocol: TCP
+   ```
+2. **Launch Cluster**:
+   ```bash
+   kind create cluster --config kind-config.yaml
+   ```
+3. **Deploy Ingress NGINX**:
+   ```bash
+   kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+   ```
+4. **Load Docker Images**:
+   ```bash
+   kind load docker-image ankit5609/codeforge-frontend:v1
+   kind load docker-image ankit5609/codeforge-workspace-service:v1
+   ```
+5. **Apply Manifests**:
+   ```bash
+   kubectl apply -f k8s/infra/namespaces.yaml
+   kubectl apply -f k8s/stateful/
+   kubectl apply -f k8s/services/
+   kubectl apply -f k8s/proxy/
+   kubectl apply -f k8s/infra/
+   ```
+
+
 ---
 
 ## 16. Known Limitations
