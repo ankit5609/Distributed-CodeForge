@@ -2,18 +2,45 @@
 
 <div align="center">
 
-[![Java Version](https://img.shields.io/badge/Java-21-orange.svg?style=for-the-badge&logo=openjdk)](https://openjdk.org/)
-[![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.5.15-brightgreen.svg?style=for-the-badge&logo=springboot)](https://spring.io/projects/spring-boot)
-[![Spring Cloud](https://img.shields.io/badge/Spring_Cloud-2025.0.3-6db33f.svg?style=for-the-badge&logo=spring)](https://spring.io/projects/spring-cloud)
-[![Kubernetes](https://img.shields.io/badge/Kubernetes-GKE-326ce5.svg?style=for-the-badge&logo=kubernetes)](https://kubernetes.io/)
-[![Apache Kafka](https://img.shields.io/badge/Apache_Kafka-EventDriven-231F20.svg?style=for-the-badge&logo=apachekafka)](https://kafka.apache.org/)
-[![MinIO](https://img.shields.io/badge/MinIO-Object_Storage-C72C48.svg?style=for-the-badge&logo=minio)](https://min.io/)
-[![React](https://img.shields.io/badge/React-18-61DAFB.svg?style=for-the-badge&logo=react)](https://react.dev/)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
+<!-- Core Platform -->
+[![Java](https://img.shields.io/badge/Java-21-FF6B00.svg?style=for-the-badge&logo=openjdk&logoColor=white)](https://openjdk.org/)
+[![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.5.15-6DB33F.svg?style=for-the-badge&logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
+[![Spring Cloud](https://img.shields.io/badge/Spring_Cloud-2025.0.3-6DB33F.svg?style=for-the-badge&logo=spring&logoColor=white)](https://spring.io/projects/spring-cloud)
+[![Spring AI](https://img.shields.io/badge/Spring_AI-1.1.8-6DB33F.svg?style=for-the-badge&logo=spring&logoColor=white)](https://spring.io/projects/spring-ai)
 
-**A cloud-native, AI-powered collaborative IDE with instant Kubernetes sandbox previews.**
+<!-- Infrastructure -->
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-GKE-326CE5.svg?style=for-the-badge&logo=kubernetes&logoColor=white)](https://kubernetes.io/)
+[![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED.svg?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
+[![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI%2FCD-2088FF.svg?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/features/actions)
+[![Google Cloud](https://img.shields.io/badge/GCP-Workload_Identity-4285F4.svg?style=for-the-badge&logo=googlecloud&logoColor=white)](https://cloud.google.com/)
 
-[🎨 Architecture](#-system-architecture) • [📁 Repository Map](#-repository-map) • [⚡ Execution Flows](#-execution-flows) • [🚀 Quick Start](#-quick-start) • [🌐 GKE Deployment](#-gke-deployment) • [📜 API Reference](#-api-reference)
+<!-- Data & Messaging -->
+[![Apache Kafka](https://img.shields.io/badge/Apache_Kafka-Event_Driven-231F20.svg?style=for-the-badge&logo=apachekafka&logoColor=white)](https://kafka.apache.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16_+_pgvector-4169E1.svg?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Redis](https://img.shields.io/badge/Redis-Route_Cache-DC382D.svg?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io/)
+[![MinIO](https://img.shields.io/badge/MinIO-Object_Storage-C72C48.svg?style=for-the-badge&logo=minio&logoColor=white)](https://min.io/)
+
+<!-- AI & Payments -->
+[![OpenRouter](https://img.shields.io/badge/OpenRouter-LLM_Gateway-8B5CF6.svg?style=for-the-badge&logo=openai&logoColor=white)](https://openrouter.ai/)
+[![pgvector](https://img.shields.io/badge/pgvector-RAG_Retrieval-4169E1.svg?style=for-the-badge&logo=postgresql&logoColor=white)](https://github.com/pgvector/pgvector)
+[![Stripe](https://img.shields.io/badge/Stripe-Payments-635BFF.svg?style=for-the-badge&logo=stripe&logoColor=white)](https://stripe.com/)
+
+<!-- Frontend -->
+[![React](https://img.shields.io/badge/React-18-61DAFB.svg?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
+[![Vite](https://img.shields.io/badge/Vite-5-646CFF.svg?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4.svg?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+
+<!-- Meta -->
+[![License](https://img.shields.io/badge/License-MIT-F59E0B.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
+[![Production](https://img.shields.io/badge/Status-Production_Ready-10B981.svg?style=for-the-badge)]()
+[![Architecture](https://img.shields.io/badge/Architecture-Microservices-EC4899.svg?style=for-the-badge)]()
+
+<br/>
+
+> **A cloud-native, AI-powered collaborative IDE with instant Kubernetes sandbox previews.**
+> Build, preview, and ship — all from your browser.
+
+[🎨 Architecture](#-system-architecture) &nbsp;•&nbsp; [📁 Repository Map](#-repository-map) &nbsp;•&nbsp; [⚡ Execution Flows](#-execution-flows) &nbsp;•&nbsp; [🚀 Quick Start](#-quick-start) &nbsp;•&nbsp; [🔄 CI/CD](#-cicd-pipeline) &nbsp;•&nbsp; [📜 API Reference](#-api-reference)
 
 </div>
 
@@ -32,36 +59,103 @@
 
 ## 🎨 System Architecture
 
-Distributed CodeForge splits into two planes: a core stateless **control plane** (`codeforge-core`) and an isolated dynamic **sandbox execution plane** (`codeforge-previews`).
+Distributed CodeForge is split into **two Kubernetes namespaces** that are network-isolated from each other:
+- `codeforge-core` — the stateless control plane housing all microservices, databases, and the message bus
+- `codeforge-previews` — the dynamic sandbox execution plane for isolated runner pods
 
 ```mermaid
-graph TD
-    Client[Browser Client] -->|HTTP / WebSocket| Ingress[NGINX Ingress Controller]
+flowchart TB
+    classDef client fill:#1e293b,stroke:#38bdf8,color:#f8fafc,font-weight:bold
+    classDef ingress fill:#0f172a,stroke:#818cf8,color:#f8fafc,font-weight:bold
+    classDef gateway fill:#1e3a5f,stroke:#3b82f6,color:#f8fafc,font-weight:bold
+    classDef service fill:#1a2e1a,stroke:#4ade80,color:#f8fafc
+    classDef infra fill:#2d1b1b,stroke:#f87171,color:#f8fafc
+    classDef db fill:#271f3d,stroke:#a78bfa,color:#f8fafc
+    classDef proxy fill:#1c1f2e,stroke:#fb923c,color:#f8fafc,font-weight:bold
+    classDef runner fill:#1a1f2e,stroke:#60a5fa,color:#f8fafc
+    classDef configsvc fill:#1a2a1a,stroke:#86efac,color:#f8fafc
 
-    subgraph codeforge-core
-        Ingress -->|/api/*| Gateway[api-gateway :80]
-        Ingress -->|/*| Frontend[codeforge-frontend :80]
+    Browser(["🌐  Browser Client"]):::client
 
-        Gateway -->|HTTP/REST| Account[account-service :9010]
-        Gateway -->|HTTP/REST| Workspace[workspace-service :9020]
-        Gateway -->|HTTP/REST| Intel[intelligence-service :9030]
-
-        Eureka[discovery-service Eureka] -.->|Register/Discover| Gateway
-        Config[config-service ConfigServer] -->|Distribute Config| Gateway & Account & Workspace & Intel
-
-        MinIO[(MinIO Object Storage)] <--> Workspace
-        Postgres[(PostgreSQL + pgvector)] <--> Account & Workspace & Intel
-        Redis[(Redis Cache)] <--> Workspace
-        Kafka{Kafka Message Bus} <--> Account & Workspace & Intel
+    subgraph INGRESS [" "]
+        NG["⚡ NGINX Ingress Controller\n──────────────────────\nRoutes: /api/* → Gateway\n        /* → Frontend\n        *.previews.* → Proxy"]:::ingress
     end
 
-    subgraph codeforge-previews
-        Proxy[codeforge-me-proxy :80] <-->|Redis Route Lookup| Redis
-        Ingress -->|*.previews.domain| Proxy
-        Proxy -->|Forward TCP/WS| PreviewPods[Runner Pods]
-        Workspace -->|Orchestrate via Fabric8| PreviewPods
-        PreviewPods -->|Mirror Files| MinIO
+    Browser -->|"HTTPS / WSS"| NG
+
+    subgraph CORE ["☸️  codeforge-core  |  Kubernetes Namespace"]
+        direction TB
+
+        subgraph FRONTEND_ROW [" "]
+            FE["🖥️  codeforge-frontend\n:80  |  Nginx + React SPA"]:::service
+        end
+
+        subgraph REGISTRY [" "]
+            direction LR
+            CFG["⚙️  config-service\n:8888  |  Spring Cloud Config\nGit-backed profiles"]:::configsvc
+            EUR["🔍  discovery-service\n:8761  |  Eureka Registry"]:::configsvc
+        end
+
+        subgraph GATEWAY_ROW [" "]
+            GW["🛡️  api-gateway\n:80  |  JWT Filter + Load Balancer"]:::gateway
+        end
+
+        subgraph SERVICES ["🔧  Microservices"]
+            direction LR
+            ACC["👤  account-service\n:9010\nAuth · Stripe · Email"]:::service
+            WS["📁  workspace-service\n:9020\nFiles · K8s · MinIO Sync"]:::service
+            INT["🧠  intelligence-service\n:9030\nLLM · RAG · Embeddings"]:::service
+        end
+
+        subgraph MESSAGING ["📨  Message Bus"]
+            KAFKA["Apache Kafka\n─────────────────\nfile-storage-request-event\nfile-store-responses\nnotification-events"]:::infra
+        end
+
+        subgraph DATASTORES ["🗄️  Data Layer"]
+            direction LR
+            PG[("🐘 PostgreSQL 16\n+ pgvector\naccount_db\nworkspace_db\nintelligence_db")]:::db
+            RD[("⚡ Redis\nRoute Cache\nTTL Metrics")]:::db
+            MN[("📦 MinIO\nObject Storage\nProject Files")]:::db
+        end
     end
+
+    subgraph PREVIEWS ["🏗️  codeforge-previews  |  Isolated Namespace"]
+        direction LR
+        PROX["🔀  codeforge-me-proxy\n:80  |  Subdomain Router\nReads Redis route keys"]:::proxy
+        PODS["🚀  Runner Pods Pool\nnpm run dev  :5173\nSyncer + Node sidecar"]:::runner
+    end
+
+    %% Ingress routing
+    NG -->|"/* static assets"| FE
+    NG -->|"/api/* authenticated"| GW
+    NG -->|"*.previews.domain  →"| PROX
+
+    %% Config & Discovery
+    CFG -.->|"Distribute profiles\nat startup"| GW & ACC & WS & INT
+    EUR -.->|"Service registry\nlookup"| GW
+
+    %% Gateway to services
+    GW -->|"HTTP/REST"| ACC
+    GW -->|"HTTP/REST"| WS
+    GW -->|"HTTP/REST"| INT
+
+    %% Services to data
+    ACC <-->|"CRUD"| PG
+    WS <-->|"CRUD"| PG
+    WS <-->|"File R/W"| MN
+    WS <-->|"Route keys\nTTL cache"| RD
+    INT <-->|"Chat history\nvector search"| PG
+
+    %% Kafka Saga
+    INT -->|"FileStoreRequestEvent\n(sagaId + content)"| KAFKA
+    KAFKA -->|"Idempotent consume"| WS
+    ACC -->|"NotificationEvent"| KAFKA
+
+    %% Sandbox plane
+    WS -->|"Fabric8 API\nClaim / evict pod"| PODS
+    PODS -->|"Mirror project files"| MN
+    PROX <-->|"Redis route lookup\nproject-id → podIP:5173"| RD
+    PROX -->|"Forward TCP / WebSocket"| PODS
 ```
 
 ---
