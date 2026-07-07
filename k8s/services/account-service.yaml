@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: account-service
-          image: ankit5609/codeforge-account-service@sha256:c7b14afa4ca66baa9c88a8c836d493e38e84a08782584974da11b4c2de7ebd45
+          image: ankit5609/codeforge-account-service:v1
           imagePullPolicy: Always
           ports:
             - containerPort: 9050      
@@ -59,10 +59,10 @@ spec:
                   key: APP_FRONTEND_URL
           resources:
             requests:
-              cpu: 100m
-              memory: 256Mi
-            limits:
               cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 500m
               memory: 512Mi
           readinessProbe:
             httpGet:

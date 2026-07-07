@@ -15,7 +15,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 
 @RequiredArgsConstructor
-@RequestMapping("/internal/v1/")
+@RequestMapping("/internal/v1")
 @RestController
 @Validated
 public class InternalWorkspaceController {

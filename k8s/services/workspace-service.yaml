@@ -58,7 +58,7 @@ spec:
           # GKE Autopilot sometimes uses a cached layer/image for snapshot tags even with
           # imagePullPolicy: Always if the tag has not explicitly changed (or registry sync lag).
           # Using the exact digest guarantees that Kubernetes pulls our new code.
-          image: ankit5609/codeforge-workspace-service@sha256:d42f746878cfebc7eb82cd910798244b305044414b0f0486efddbe062d81a89f
+          image: ankit5609/codeforge-workspace-service:v1
           imagePullPolicy: Always
           ports:
             - containerPort: 9020
@@ -98,10 +98,10 @@ spec:
                   key: JWT_SECRET
           resources:
             requests:
-              cpu: 100m
-              memory: 256Mi
-            limits:
               cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 500m
               memory: 512Mi
           readinessProbe:
             httpGet:

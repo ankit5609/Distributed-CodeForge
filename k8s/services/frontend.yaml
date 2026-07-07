@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: codeforge-frontend
-          image: ankit5609/codeforge-frontend:latest
+          image: ankit5609/codeforge-frontend:v3
           imagePullPolicy: Always
           ports:
             - containerPort: 80
