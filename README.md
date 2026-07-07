@@ -489,12 +489,77 @@ kind delete cluster --name codeforge
 
 ---
 
+## 🔄 CI/CD Pipeline
+
+Every microservice has a dedicated **GitHub Actions** workflow that triggers automatically on push to `main` — but **only when files within that service directory change** (path-filtered triggers), avoiding unnecessary builds.
+
+### Workflows
+
+| Workflow File | Trigger Path | Service |
+| :--- | :--- | :--- |
+| `deploy-account-service.yaml` | `account-service/**` | account-service |
+| `deploy-workspace-service.yaml` | `workspace-service/**` | workspace-service |
+| `deploy-intelligence-service.yaml` | `intelligence-service/**` | intelligence-service |
+| `deploy-config-service.yaml` | `config-service/**` | config-service |
+| `deploy-api-gateway.yaml` | `api-gateway/**` | api-gateway |
+
+### Pipeline Stages (per service)
+
+```
+git push → main
+      │
+      ▼
+① Checkout code
+      │
+      ▼
+② Set up JDK 21 (Temurin) + Maven cache
+      │
+      ▼
+③ Build common-lib (shared dependency)
+      │
+      ▼
+④ Jib compile → push Docker image to DockerHub
+      │   Image tagged: docker.io/ankit5609/<service>:<git-sha>
+      │   Also tagged: latest
+      │   No Docker daemon needed (Jib builds directly)
+      │
+      ▼
+⑤ Auth to GCP via Workload Identity Federation (keyless — no SA key file)
+      │
+      ▼
+⑥ Get GKE cluster credentials
+      │
+      ▼
+⑦ kubectl set image → rolling update on GKE
+      │
+      ▼
+⑧ kubectl rollout status → pipeline blocks until pods are healthy ✅
+```
+
+### Required GitHub Secrets
+
+| Secret | Description |
+| :--- | :--- |
+| `DOCKERHUB_USERNAME` | Docker Hub username for Jib image push |
+| `DOCKERHUB_TOKEN` | Docker Hub access token for Jib image push |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | GCP Workload Identity Federation provider resource name |
+| `GCP_SERVICE_ACCOUNT` | GCP service account email with GKE deploy permissions |
+| `GCP_CLUSTER` | Name of your GKE cluster |
+| `GCP_ZONE` | Zone/region of your GKE cluster |
+
+> **Keyless Auth**: The pipeline uses [GCP Workload Identity Federation](https://cloud.google.com/iam/docs/workload-identity-federation) instead of long-lived service account JSON keys. The GitHub Actions OIDC token is exchanged for short-lived GCP credentials — no secrets stored on disk.
+
+### Config Server
+
+The `config-service` reads all application profiles from a **dedicated private GitHub repository** (`codeforge-config-server`). Each microservice fetches its environment-specific YAML config (database URLs, API keys, feature flags) from this repo at startup via Spring Cloud Config. Updating config is as simple as pushing to that repo — no service restart required for most settings.
+
+---
+
 ## ⚠️ Known Limitations
 
 1. **Single-Instance Databases** — Postgres, Redis, Kafka, and MinIO run as single StatefulSets with no replication or active failover
 2. **No Auto-scaling** — the sandbox runner pool must be manually scaled via `kubectl scale` or the `start-cluster.sh` helper
 3. **Synchronous PGVector Indexing** — file chunk indexing happens synchronously on save; background batch reindexing is not yet implemented
-4. **No CI/CD Integration** — currently built and deployed manually; GitHub Actions pipeline is planned
 
 ---
 
