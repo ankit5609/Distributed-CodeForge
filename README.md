@@ -64,101 +64,134 @@ Distributed CodeForge is split into **two Kubernetes namespaces** that are netwo
 - `codeforge-previews` — the dynamic sandbox execution plane for isolated runner pods
 
 ```mermaid
-flowchart TB
-    classDef client fill:#1e293b,stroke:#38bdf8,color:#f8fafc,font-weight:bold
-    classDef ingress fill:#0f172a,stroke:#818cf8,color:#f8fafc,font-weight:bold
-    classDef gateway fill:#1e3a5f,stroke:#3b82f6,color:#f8fafc,font-weight:bold
-    classDef service fill:#1a2e1a,stroke:#4ade80,color:#f8fafc
-    classDef infra fill:#2d1b1b,stroke:#f87171,color:#f8fafc
-    classDef db fill:#271f3d,stroke:#a78bfa,color:#f8fafc
-    classDef proxy fill:#1c1f2e,stroke:#fb923c,color:#f8fafc,font-weight:bold
-    classDef runner fill:#1a1f2e,stroke:#60a5fa,color:#f8fafc
-    classDef configsvc fill:#1a2a1a,stroke:#86efac,color:#f8fafc
+flowchart LR
+    %% ── Node Styles ─────────────────────────────────────────────────────────
+    classDef client   fill:#0F172A,stroke:#38BDF8,color:#F8FAFC,font-weight:bold
+    classDef ingress  fill:#1E1B4B,stroke:#818CF8,color:#F8FAFC,font-weight:bold
+    classDef frontend fill:#14532D,stroke:#4ADE80,color:#F8FAFC
+    classDef gateway  fill:#1E3A5F,stroke:#60A5FA,color:#F8FAFC,font-weight:bold
+    classDef cfgsvc   fill:#1C1917,stroke:#D4A26A,color:#F8FAFC
+    classDef svc      fill:#14532D,stroke:#4ADE80,color:#F8FAFC
+    classDef kafka    fill:#431407,stroke:#FB923C,color:#F8FAFC,font-weight:bold
+    classDef db       fill:#2E1065,stroke:#C084FC,color:#F8FAFC
+    classDef proxy    fill:#172554,stroke:#38BDF8,color:#F8FAFC,font-weight:bold
+    classDef runner   fill:#0C1A2E,stroke:#60A5FA,color:#F8FAFC
 
-    Browser(["🌐  Browser Client"]):::client
+    %% ── Entry Point ─────────────────────────────────────────────────────────
+    BROWSER(["🌐 Browser Client"]):::client
 
-    subgraph INGRESS [" "]
-        NG["⚡ NGINX Ingress Controller\n──────────────────────\nRoutes: /api/* → Gateway\n        /* → Frontend\n        *.previews.* → Proxy"]:::ingress
-    end
+    NGINX["⚡ NGINX Ingress
+    /api/*  →  API Gateway
+    /*      →  Frontend
+    *.previews.*  →  Proxy"]:::ingress
 
-    Browser -->|"HTTPS / WSS"| NG
+    BROWSER -->|"HTTPS / WSS"| NGINX
 
-    subgraph CORE ["☸️  codeforge-core  |  Kubernetes Namespace"]
+    %% ── codeforge-core Namespace ────────────────────────────────────────────
+    subgraph CORE ["  ☸️  codeforge-core  "]
         direction TB
 
-        subgraph FRONTEND_ROW [" "]
-            FE["🖥️  codeforge-frontend\n:80  |  Nginx + React SPA"]:::service
-        end
+        %% Tier 0 — Static Frontend
+        FE["🖥️ codeforge-frontend
+        :80  ·  Nginx + React SPA"]:::frontend
 
-        subgraph REGISTRY [" "]
+        %% Tier 1 — Infrastructure Services
+        subgraph INFRA_ROW ["  📡 Infrastructure  "]
             direction LR
-            CFG["⚙️  config-service\n:8888  |  Spring Cloud Config\nGit-backed profiles"]:::configsvc
-            EUR["🔍  discovery-service\n:8761  |  Eureka Registry"]:::configsvc
+            CFG["⚙️ config-service
+            :8888  ·  Spring Cloud Config
+            Git-backed profiles"]:::cfgsvc
+            EUR["🔍 discovery-service
+            :8761  ·  Eureka Registry"]:::cfgsvc
         end
 
-        subgraph GATEWAY_ROW [" "]
-            GW["🛡️  api-gateway\n:80  |  JWT Filter + Load Balancer"]:::gateway
-        end
+        %% Tier 2 — Gateway
+        GW["🛡️ api-gateway  :80
+        JWT Validation  ·  Load Balancer"]:::gateway
 
-        subgraph SERVICES ["🔧  Microservices"]
+        %% Tier 3 — Domain Services
+        subgraph SVCS ["  🔧 Microservices  "]
             direction LR
-            ACC["👤  account-service\n:9010\nAuth · Stripe · Email"]:::service
-            WS["📁  workspace-service\n:9020\nFiles · K8s · MinIO Sync"]:::service
-            INT["🧠  intelligence-service\n:9030\nLLM · RAG · Embeddings"]:::service
+            ACC["👤 account-service
+            :9010
+            Auth · Stripe · Email"]:::svc
+            WS["📁 workspace-service
+            :9020
+            Files · K8s · MinIO"]:::svc
+            INT["🧠 intelligence-service
+            :9030
+            LLM · RAG · pgvector"]:::svc
         end
 
-        subgraph MESSAGING ["📨  Message Bus"]
-            KAFKA["Apache Kafka\n─────────────────\nfile-storage-request-event\nfile-store-responses\nnotification-events"]:::infra
-        end
+        %% Tier 4 — Messaging
+        KAFKA[["🔁 Apache Kafka
+        ─────────────────────────
+        file-storage-request-event
+        notification-events"]]:::kafka
 
-        subgraph DATASTORES ["🗄️  Data Layer"]
+        %% Tier 5 — Data
+        subgraph DATA ["  🗄️ Data Layer  "]
             direction LR
-            PG[("🐘 PostgreSQL 16\n+ pgvector\naccount_db\nworkspace_db\nintelligence_db")]:::db
-            RD[("⚡ Redis\nRoute Cache\nTTL Metrics")]:::db
-            MN[("📦 MinIO\nObject Storage\nProject Files")]:::db
+            PG[("🐘 PostgreSQL 16
+            + pgvector
+            account · workspace · intel")]:::db
+            RD[("⚡ Redis
+            Route cache
+            TTL metrics")]:::db
+            MN[("📦 MinIO
+            Object storage
+            Project files")]:::db
         end
     end
 
-    subgraph PREVIEWS ["🏗️  codeforge-previews  |  Isolated Namespace"]
-        direction LR
-        PROX["🔀  codeforge-me-proxy\n:80  |  Subdomain Router\nReads Redis route keys"]:::proxy
-        PODS["🚀  Runner Pods Pool\nnpm run dev  :5173\nSyncer + Node sidecar"]:::runner
+    %% ── codeforge-previews Namespace ────────────────────────────────────────
+    subgraph PREV ["  🏗️  codeforge-previews  "]
+        direction TB
+        PROX["🔀 codeforge-me-proxy
+        :80  ·  Subdomain router"]:::proxy
+        PODS["🚀 Runner Pod Pool
+        npm run dev :5173
+        Syncer sidecar"]:::runner
     end
 
-    %% Ingress routing
-    NG -->|"/* static assets"| FE
-    NG -->|"/api/* authenticated"| GW
-    NG -->|"*.previews.domain  →"| PROX
+    %% ── Routing ─────────────────────────────────────────────────────────────
+    NGINX -->|"Static assets"| FE
+    NGINX -->|"Authenticated API"| GW
+    NGINX -->|"Sandbox subdomain"| PROX
 
-    %% Config & Discovery
-    CFG -.->|"Distribute profiles\nat startup"| GW & ACC & WS & INT
-    EUR -.->|"Service registry\nlookup"| GW
+    %% ── Config & Discovery (passive) ────────────────────────────────────────
+    CFG -.->|"Profiles at startup"| GW
+    CFG -.->|"Profiles at startup"| ACC
+    CFG -.->|"Profiles at startup"| WS
+    CFG -.->|"Profiles at startup"| INT
+    EUR -.->|"Registry lookup"| GW
 
-    %% Gateway to services
-    GW -->|"HTTP/REST"| ACC
-    GW -->|"HTTP/REST"| WS
-    GW -->|"HTTP/REST"| INT
+    %% ── Gateway → Services ──────────────────────────────────────────────────
+    GW -->|"REST"| ACC
+    GW -->|"REST"| WS
+    GW -->|"REST + SSE stream"| INT
 
-    %% Services to data
+    %% ── Services → Data ─────────────────────────────────────────────────────
     ACC <-->|"CRUD"| PG
-    WS <-->|"CRUD"| PG
-    WS <-->|"File R/W"| MN
-    WS <-->|"Route keys\nTTL cache"| RD
-    INT <-->|"Chat history\nvector search"| PG
+    WS  <-->|"CRUD"| PG
+    INT <-->|"Chat · Vector search"| PG
+    WS  <-->|"File R/W"| MN
+    WS  <-->|"Route keys"| RD
 
-    %% Kafka Saga
-    INT -->|"FileStoreRequestEvent\n(sagaId + content)"| KAFKA
-    KAFKA -->|"Idempotent consume"| WS
+    %% ── Kafka Event Bus ─────────────────────────────────────────────────────
+    INT -->|"FileStoreRequestEvent"| KAFKA
     ACC -->|"NotificationEvent"| KAFKA
+    KAFKA -->|"Idempotent consume"| WS
 
-    %% Sandbox plane
-    WS -->|"Fabric8 API\nClaim / evict pod"| PODS
-    PODS -->|"Mirror project files"| MN
-    PROX <-->|"Redis route lookup\nproject-id → podIP:5173"| RD
-    PROX -->|"Forward TCP / WebSocket"| PODS
+    %% ── Sandbox Plane ───────────────────────────────────────────────────────
+    WS   -->|"Fabric8 · Claim pod"| PODS
+    PODS -->|"Mirror files"| MN
+    PROX <-->|"Route lookup"| RD
+    PROX -->|"Forward TCP / WS"| PODS
 ```
 
 ---
+
 
 ## 📁 Repository Map
 
