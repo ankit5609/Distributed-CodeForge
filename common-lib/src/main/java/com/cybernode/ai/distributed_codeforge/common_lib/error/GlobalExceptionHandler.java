@@ -1,4 +1,5 @@
 package com.cybernode.ai.distributed_codeforge.common_lib.error;
+import jakarta.validation.ConstraintViolationException;
 import io.jsonwebtoken.JwtException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -35,6 +36,18 @@ public class GlobalExceptionHandler {
                 .toList();
         ApiError apiError=new ApiError(HttpStatus.BAD_REQUEST,"Input Validation Failed",errors);
         log.error(apiError.toString(),ex);
+        return ResponseEntity.status(apiError.status()).body(apiError);
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ApiError> handleConstraintViolationException(ConstraintViolationException ex) {
+        List<ApiFieldError> errors = ex.getConstraintViolations()
+                .stream().map(violation -> new ApiFieldError(
+                        violation.getPropertyPath().toString(),
+                        violation.getMessage()
+                )).toList();
+        ApiError apiError = new ApiError(HttpStatus.BAD_REQUEST, "Constraint Validation Failed", errors);
+        log.error(apiError.toString(), ex);
         return ResponseEntity.status(apiError.status()).body(apiError);
     }
 

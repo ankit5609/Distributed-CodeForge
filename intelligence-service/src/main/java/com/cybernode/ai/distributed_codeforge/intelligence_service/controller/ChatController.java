@@ -39,7 +39,7 @@ public class ChatController {
     @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Flux<ServerSentEvent<StreamResponse>> streamChat(
             @RequestParam(value = "message", required = false) String message,
-            @RequestParam("projectId") @NotNull Long projectId,
+            @RequestParam("projectId") @NotNull @Min(1) Long projectId,
             @RequestPart(value = "image", required = false) MultipartFile image) {
 
         if ((message == null || message.trim().isEmpty()) && (image == null || image.isEmpty())) {
