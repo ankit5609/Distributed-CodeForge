@@ -138,6 +138,7 @@ public class KubernetesDeploymentServiceImpl implements DeploymentService {
         });
 
         try {
+            killExistingWatchers(podName);
             // Exclude node_modules from MinIO mirroring so background sync events do not wipe local pod node_modules
             String initialSyncCmd = String.format("for f in /app/* /app/.[!.]*; do [ -e \"$f\" ] && [ \"$f\" != \"/app/node_modules\" ] && rm -rf \"$f\"; done && mc mirror --overwrite --exclude \"node_modules/*\" myminio/projects/%d/ /app/", projectId);
             execCommand(podName, "syncer", "sh", "-c", initialSyncCmd);
