@@ -76,11 +76,11 @@ public class KubernetesDeploymentServiceImpl implements DeploymentService {
             
             try {
                 // Step 1: npm install (blocking - wait for it to fully finish)
-                execCommand(podName, "runner", "sh", "-c", "npm install --no-audit --no-fund --prefer-offline");
+                execCommand(podName, "runner", "sh", "-c", "npm install --legacy-peer-deps --no-audit --no-fund --prefer-offline");
                 // Step 2: Kill existing Vite by port (fuser kills the process holding 5173/tcp)
                 execCommand(podName, "runner", "sh", "-c", "fuser -k 5173/tcp 2>/dev/null || pkill -9 -f vite 2>/dev/null || true; sleep 1");
-                // Step 3: Start fresh Vite in background
-                execCommand(podName, "runner", "sh", "-c", "nohup npm run dev -- --host 0.0.0.0 --port 5173 > /app/dev.log 2>&1 &");
+                // Step 3: Start fresh Vite in background (with CI=true and stdin closed)
+                execCommand(podName, "runner", "sh", "-c", "CI=true nohup npm run dev -- --host 0.0.0.0 --port 5173 </dev/null >/app/dev.log 2>&1 &");
             } catch (Exception e) {
                 log.warn("Failed to restart dev server on existing pod {}, attempting clean redeploy...", podName, e);
                 client.pods().inNamespace(namespace).withName(podName).delete();
@@ -138,19 +138,19 @@ public class KubernetesDeploymentServiceImpl implements DeploymentService {
         });
 
         try {
-            killExistingWatchers(podName);
-            String initialSyncCmd = String.format("for f in /app/* /app/.[!.]*; do [ -e \"$f\" ] && [ \"$f\" != \"/app/node_modules\" ] && rm -rf \"$f\"; done && mc mirror --overwrite myminio/projects/%d/ /app/", projectId);
+            // Exclude node_modules from MinIO mirroring so background sync events do not wipe local pod node_modules
+            String initialSyncCmd = String.format("for f in /app/* /app/.[!.]*; do [ -e \"$f\" ] && [ \"$f\" != \"/app/node_modules\" ] && rm -rf \"$f\"; done && mc mirror --overwrite --exclude \"node_modules/*\" myminio/projects/%d/ /app/", projectId);
             execCommand(podName, "syncer", "sh", "-c", initialSyncCmd);
 
-            String watchCmd = String.format("nohup mc mirror --overwrite --watch myminio/projects/%d/ /app/ > /app/sync.log 2>&1 &", projectId);
+            String watchCmd = String.format("nohup mc mirror --overwrite --watch --exclude \"node_modules/*\" myminio/projects/%d/ /app/ > /app/sync.log 2>&1 &", projectId);
             execCommand(podName, "syncer", "sh", "-c", watchCmd);
 
-            // Step 1: npm install (blocking - wait for it to fully finish before starting Vite)
-            execCommand(podName, "runner", "sh", "-c", "npm install --no-audit --no-fund --prefer-offline");
+            // Step 1: Force NODE_ENV=development and --include=dev so Vite & build tools are installed in Alpine container environments
+            execCommand(podName, "runner", "sh", "-c", "NODE_ENV=development npm install --legacy-peer-deps --include=dev --no-audit --no-fund --prefer-offline");
             // Step 2: Ensure port 5173 is free (kill by port, not by process name)
             execCommand(podName, "runner", "sh", "-c", "fuser -k 5173/tcp 2>/dev/null || pkill -9 -f vite 2>/dev/null || true; sleep 1");
-            // Step 3: Start Vite in background
-            execCommand(podName, "runner", "sh", "-c", "nohup npm run dev -- --host 0.0.0.0 --port 5173 > /app/dev.log 2>&1 &");
+            // Step 3: Start Vite in background with CI=true and closed stdin </dev/null so process daemonizes without receiving EOF signals
+            execCommand(podName, "runner", "sh", "-c", "CI=true nohup npm run dev -- --host 0.0.0.0 --port 5173 </dev/null >/app/dev.log 2>&1 &");
 
             Pod updatedPod = client.pods().inNamespace(namespace).withName(podName).get();
             registerRoute(domain, updatedPod);

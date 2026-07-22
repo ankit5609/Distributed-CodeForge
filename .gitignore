@@ -1,0 +1,68 @@
+### OS ###
+.DS_Store
+
+### Environment ###
+.env
+.env.*
+!.env.example
+
+### Logs ###
+*.log
+
+### Temporary Files ###
+*.tmp
+*.bak
+*.swp
+*.swo
+
+### Java / Maven ###
+target/
+*.class
+*.jar
+*.war
+*.ear
+
+### Node.js ###
+node_modules/
+dist/
+build/
+
+### IntelliJ ###
+.idea/
+*.iml
+*.iws
+*.ipr
+
+### VS Code ###
+.vscode/
+
+### STS ###
+.apt_generated/
+.classpath
+.factorypath
+.project
+.settings/
+.springBeans
+.sts4-cache/
+
+### NetBeans ###
+nbproject/
+nbbuild/
+nbdist/
+.nb-gradle/
+
+### Maven Wrapper ###
+!.mvn/wrapper/maven-wrapper.jar
+
+### Generated source exceptions ###
+!**/src/main/**/target/
+!**/src/test/**/target/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### Documentation ###
+HELP.md
+project_overview.md
+brain.md
+FRONTEND_GUIDE.md
+swagger.json
