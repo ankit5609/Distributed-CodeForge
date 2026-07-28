@@ -37,7 +37,7 @@
 
 <br/>
 
-> **A cloud-native, AI-powered collaborative IDE with instant Kubernetes sandbox previews.**
+> **A cloud-native, AI-powered full-stack application development and instant Kubernetes sandbox preview platform.**
 > Build, preview, and ship — all from your browser.
 
 [🎨 Architecture](#-system-architecture) &nbsp;•&nbsp; [📁 Repository Map](#-repository-map) &nbsp;•&nbsp; [⚡ Execution Flows](#-execution-flows) &nbsp;•&nbsp; [🚀 Quick Start](#-quick-start) &nbsp;•&nbsp; [🔄 CI/CD](#-cicd-pipeline) &nbsp;•&nbsp; [📜 API Reference](#-api-reference)
@@ -48,7 +48,7 @@
 
 ## 📖 Overview
 
-**Distributed CodeForge** is a world-class, cloud-native collaborative IDE and preview sandbox platform. Built on a modular microservices architecture, it features a state-of-the-art AI code generation and execution engine:
+**Distributed CodeForge** is a world-class, cloud-native full-stack application generation and preview sandbox platform. Built on a modular microservices architecture, it features a state-of-the-art AI code generation and execution engine:
 
 - 💻 **Real-Time Collaborative Coding** — Multi-user project access with real-time directory updates and role-based permissions.
 - 🧠 **Spring AI & LLM Engine** — Streaming LLM chat using OpenAI drivers via OpenRouter, featuring a strict XML prompt protocol for planning and execution.
